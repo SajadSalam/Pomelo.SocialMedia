@@ -1,2 +1,2 @@
-export const appName = 'Vitesse for Nuxt 4'
-export const appDescription = 'Vitesse for Nuxt 4'
+export const appName = 'Pomelo Agency'
+export const appDescription = 'Social media management and content scheduling platform'
