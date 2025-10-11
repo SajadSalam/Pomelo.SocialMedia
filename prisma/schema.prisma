@@ -1,0 +1,119 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  settings  UserSettings?
+}
+
+model UserSettings {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  metaLongLivedToken String?
+  metaAppId          String?
+  metaAppSecret      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model Client {
+  id           String        @id @default(cuid())
+  name         String
+  notes        String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  channels     Channel[]
+  postRequests PostRequest[]
+}
+
+model Channel {
+  id           String        @id @default(cuid())
+  clientId     String
+  client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  type         String        // FACEBOOK_PAGE | INSTAGRAM_BUSINESS
+  externalId   String        // FB Page ID or IG Business ID
+  accessToken  String?
+  name         String?
+  pageUsername String?
+  isEnabled    Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  publications Publication[]
+
+  @@index([clientId])
+}
+
+model MediaAsset {
+  id        String   @id @default(cuid())
+  filename  String
+  mimeType  String
+  bytes     Int
+  url       String
+  thumbUrl  String?
+  createdAt DateTime @default(now())
+}
+
+model PostRequest {
+  id           String        @id @default(cuid())
+  clientId     String
+  client       Client        @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  kind         String        // SINGLE_IMAGE | CAROUSEL | VIDEO
+  caption      String
+  mediaIds     String        // JSON array of MediaAsset IDs
+  thumbnailId  String?
+  status       String        @default("DRAFT") // DRAFT | READY | QUEUED | PUBLISHED | FAILED
+  scheduledAt  DateTime?
+  createdVia   String        @default("dashboard") // telegram | dashboard
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  publications Publication[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+model Publication {
+  id             String    @id @default(cuid())
+  postRequestId  String
+  postRequest    PostRequest @relation(fields: [postRequestId], references: [id], onDelete: Cascade)
+  channelId      String
+  channel        Channel   @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  platformPostId String?   // FB/IG post ID
+  status         String    @default("queued") // queued | published | failed
+  error          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  insights       Insight[]
+
+  @@index([postRequestId])
+  @@index([channelId])
+  @@index([status])
+}
+
+model Insight {
+  id            String      @id @default(cuid())
+  publicationId String
+  publication   Publication @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+  metric        String      // impressions, reach, likes, comments, saves, shares, etc.
+  value         Float
+  period        String      // lifetime | day
+  capturedAt    DateTime    @default(now())
+
+  @@index([publicationId])
+}
+

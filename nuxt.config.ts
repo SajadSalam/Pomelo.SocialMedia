@@ -37,6 +37,21 @@ export default defineNuxtConfig({
     classSuffix: '',
   },
 
+  runtimeConfig: {
+    jwtSecret: process.env.JWT_SECRET || 'default-secret-change-in-production',
+    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
+    telegramWebhookSecret: process.env.TELEGRAM_WEBHOOK_SECRET || 'default-webhook-secret',
+    redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
+    databaseUrl: process.env.DATABASE_URL || 'file:./dev.db',
+    baseUrl: process.env.BASE_URL || 'http://localhost:3001',
+    public: {
+      apiBase: process.env.API_BASE || '/api',
+    },
+  },
+  devServer: {
+    host: '0.0.0.0', // Allow external access (for Cloudflare tunnel)
+  },
+
   future: {
     compatibilityVersion: 4,
   },
@@ -61,6 +76,14 @@ export default defineNuxtConfig({
       crawlLinks: false,
       routes: ['/'],
       ignore: ['/hi'],
+    },
+    experimental: {
+      websocket: true,
+    },
+  },
+  vite: {
+    server: {
+      allowedHosts: ['*', import.meta.env.BASE_URL.replace('https://', '')],
     },
   },
 
