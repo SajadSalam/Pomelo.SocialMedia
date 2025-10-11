@@ -30,7 +30,7 @@ jobs:
           EOF
 
       - name: Install dependencies
-        run: pnpm install
+        run: pnpm install --no-frozen-lockfile
 
       - name: Generate Prisma client
         run: pnpm run db:generate
@@ -38,30 +38,33 @@ jobs:
       - name: Build project
         run: pnpm run build
 
-      - name: Install SSH Key
-        uses: shimataro/ssh-key-action@v2
-        with:
-          password: ${{ secrets.SSH_PASSWORD }}
-          known_hosts: placeholder
+      - name: Install sshpass for password authentication
+        run: sudo apt-get update && sudo apt-get install -y sshpass
 
       - name: Add known hosts
         run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
 
       - name: Deploy to server
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
           # Create deployment package
-          rsync -avz --delete \
+          sshpass -e rsync -avz --delete \
             --exclude 'node_modules' \
             --exclude '.git' \
             --exclude '.nuxt' \
             --exclude 'prisma/dev.db' \
             --exclude 'public/uploads' \
+            -e "ssh -p ${{ secrets.SSH_PORT || 22 }}" \
             .output/ \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/var/www/nuxt_social/.output/
 
       - name: Transfer additional files
+        env:
+          SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          rsync -avz \
+          sshpass -e rsync -avz \
+            -e "ssh -p ${{ secrets.SSH_PORT || 22 }}" \
             package.json \
             pnpm-lock.yaml \
             prisma/ \
@@ -83,7 +86,7 @@ jobs:
             EOF
 
             # Install production dependencies only
-            pnpm install --prod
+            pnpm install --prod --no-frozen-lockfile
 
             # Run database migrations
             pnpm run db:generate
