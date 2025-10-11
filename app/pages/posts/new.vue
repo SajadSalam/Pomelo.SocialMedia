@@ -12,6 +12,7 @@ const form = ref({
   kind: 'SINGLE_IMAGE',
   caption: '',
   mediaIds: [] as string[],
+  thumbnailId: null as string | null,
   scheduledAt: null as string | null,
 })
 const uploading = ref(false)
@@ -36,7 +37,10 @@ async function handleFileUpload(event: Event) {
   const formData = new FormData()
 
   for (let i = 0; i < input.files.length; i++) {
-    formData.append('files', input.files[i])
+    const file = input.files[i]
+    if (file) {
+      formData.append('files', file)
+    }
   }
 
   try {
@@ -61,6 +65,46 @@ async function handleFileUpload(event: Event) {
   }
   catch (error: any) {
     alert(`Failed to upload files: ${error.message}`)
+  }
+  finally {
+    uploading.value = false
+  }
+}
+
+async function handleThumbnailUpload(event: Event) {
+  const input = event.target as HTMLInputElement
+  if (!input.files || input.files.length === 0)
+    return
+
+  uploading.value = true
+  const formData = new FormData()
+  const file = input.files[0]
+  if (file) {
+    formData.append('files', file) // Only one thumbnail
+  }
+
+  try {
+    // Get auth token
+    const { token } = useAuth()
+
+    const response = await fetch('/api/uploads', {
+      method: 'POST',
+      body: formData,
+      headers: {
+        Authorization: `Bearer ${token.value}`,
+      },
+    })
+
+    if (!response.ok) {
+      throw new Error('Upload failed')
+    }
+
+    const data = await response.json()
+    form.value.thumbnailId = data.mediaAssets[0].id
+    alert('Thumbnail uploaded successfully!')
+  }
+  catch (error: any) {
+    alert(`Failed to upload thumbnail: ${error.message}`)
   }
   finally {
     uploading.value = false
@@ -171,6 +215,32 @@ onMounted(() => {
           </p>
           <p v-else-if="form.mediaIds.length > 0" text-sm text-green-600 mt-2 dark:text-green-400>
             ✓ {{ form.mediaIds.length }} file(s) uploaded
+          </p>
+        </div>
+
+        <!-- Video Thumbnail (optional, only for videos) -->
+        <div v-if="form.kind === 'VIDEO'">
+          <label text-sm text-gray-700 font-medium mb-2 block dark:text-gray-300>
+            Video Thumbnail (Optional)
+            <span text-xs text-gray-500 ml-2>
+              Custom thumbnail for Facebook
+            </span>
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+
+            text-gray-900 px-4 py-2 border border-gray-300 rounded-lg bg-white w-full dark:text-white dark:border-gray-600 dark:bg-gray-700
+            @change="handleThumbnailUpload"
+          >
+          <p v-if="form.thumbnailId" text-sm text-green-600 mt-2 dark:text-green-400>
+            ✓ Thumbnail uploaded
+          </p>
+          <p text-xs text-gray-500 mt-1 dark:text-gray-400>
+            Upload a custom thumbnail image for your video (recommended 1280x720px or 16:9 ratio).
+            <br>
+            <strong>Facebook:</strong> Will use your custom thumbnail<br>
+            <strong>Instagram:</strong> Auto-generates thumbnails (custom thumbnails not supported)
           </p>
         </div>
 

@@ -74,6 +74,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      form-data:
+        specifier: ^4.0.4
+        version: 4.0.4
     devDependencies:
       '@antfu/eslint-config':
         specifier: catalog:dev

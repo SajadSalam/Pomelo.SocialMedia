@@ -1,5 +1,7 @@
 /* eslint-disable no-console */
 import axios from 'axios'
+import FormData from 'form-data'
+import { Buffer } from 'node:buffer'
 
 const GRAPH_API_VERSION = 'v21.0'
 const GRAPH_API_BASE = `https://graph.facebook.com/${GRAPH_API_VERSION}`
@@ -183,6 +185,7 @@ export async function createInstagramPost(
     caption: string
     image_url?: string
     video_url?: string
+    thumb_offset?: number
     media_type?: 'IMAGE' | 'VIDEO' | 'CAROUSEL' | 'REELS'
     children?: string[]
   },
@@ -296,7 +299,7 @@ export async function createInstagramCarousel(
 }
 
 /**
- * Upload video to Facebook/Instagram
+ * Upload video to Facebook with optional custom thumbnail
  */
 export async function uploadVideo(
   pageId: string,
@@ -304,9 +307,12 @@ export async function uploadVideo(
   title: string,
   description: string,
   accessToken: string,
+  thumbnailUrl?: string,
 ): Promise<{ id: string }> {
   try {
-    const response = await axios.post(
+    // Step 1: Upload the video
+    console.log('📤 [Facebook API] Uploading video...')
+    const videoResponse = await axios.post(
       `${GRAPH_API_BASE}/${pageId}/videos`,
       {
         file_url: videoUrl,
@@ -315,7 +321,54 @@ export async function uploadVideo(
         access_token: accessToken,
       },
     )
-    return response.data
+
+    const videoId = videoResponse.data.id
+    console.log('✅ [Facebook API] Video uploaded:', videoId)
+
+    // Step 2: Update with custom thumbnail if provided
+    if (thumbnailUrl) {
+      console.log('📸 [Facebook API] Setting custom thumbnail:', thumbnailUrl)
+      try {
+        // Facebook requires binary image data, not URLs
+        // Download the image first
+        console.log('📥 [Facebook API] Downloading thumbnail image...')
+        const imageResponse = await axios.get(thumbnailUrl, {
+          responseType: 'arraybuffer',
+        })
+        const imageBuffer = Buffer.from(imageResponse.data, 'binary')
+
+        // Determine content type
+        const contentType = imageResponse.headers['content-type'] || 'image/jpeg'
+
+        console.log('📤 [Facebook API] Uploading thumbnail as binary data...')
+
+        // Create form data
+        const formData = new FormData()
+        formData.append('source', imageBuffer, {
+          filename: 'thumbnail.jpg',
+          contentType,
+        })
+        formData.append('access_token', accessToken)
+
+        // Upload thumbnail
+        const thumbResponse = await axios.post(
+          `${GRAPH_API_BASE}/${videoId}/thumbnails`,
+          formData,
+          {
+            headers: formData.getHeaders(),
+          },
+        )
+        console.log('✅ [Facebook API] Thumbnail updated successfully:', thumbResponse.data)
+      }
+      catch (thumbError: any) {
+        const errorMsg = thumbError.response?.data?.error?.message || thumbError.message
+        console.error('❌ [Facebook API] Failed to set thumbnail:', errorMsg)
+        console.error('   - Full error:', thumbError.response?.data)
+        // Don't fail the whole upload if thumbnail fails
+      }
+    }
+
+    return videoResponse.data
   }
   catch (error: any) {
     const fbError = error.response?.data as FacebookError

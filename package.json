@@ -60,5 +60,8 @@
     "nuxt": "catalog:build",
     "unplugin": "catalog:build",
     "vite": "catalog:build"
+  },
+  "dependencies": {
+    "form-data": "^4.0.4"
   }
 }

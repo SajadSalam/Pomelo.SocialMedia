@@ -74,6 +74,18 @@ const publishWorker = new Worker(
       const baseUrl = runtimeConfig.baseUrl || 'http://localhost:3001'
       const mediaUrls = mediaAssets.map(asset => `${baseUrl}${asset.url}`)
 
+      // Get thumbnail URL if provided
+      let thumbnailUrl: string | undefined
+      if (postRequest.thumbnailId) {
+        const thumbnail = await prisma.mediaAsset.findUnique({
+          where: { id: postRequest.thumbnailId },
+        })
+        if (thumbnail) {
+          thumbnailUrl = `${baseUrl}${thumbnail.url}`
+          console.log('🖼️  [Publisher] Thumbnail found:', thumbnailUrl)
+        }
+      }
+
       console.log('🔍 [Publisher] Publishing details:')
       console.log('   - Base URL:', baseUrl)
       console.log('   - Media URLs:', mediaUrls)
@@ -133,6 +145,7 @@ const publishWorker = new Worker(
             'Video Post',
             postRequest.caption,
             channel.accessToken,
+            thumbnailUrl, // Custom thumbnail
           )
           console.log('✅ [Facebook] Video uploaded:', result.id)
           platformPostId = result.id
@@ -176,6 +189,7 @@ const publishWorker = new Worker(
           // Video/Reel post
           console.log('🎥 [Instagram] Creating video post...')
           console.log('   - Video URL:', mediaUrls[0])
+          
           const result = await createInstagramPost(
             channel.externalId,
             {
