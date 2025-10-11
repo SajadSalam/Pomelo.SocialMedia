@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -41,3 +41,55 @@ jobs:
 
       - name: Typecheck
         run: pnpm run typecheck
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Deploy to Ubuntu Server
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            # Navigate to project directory
+            cd ${{ secrets.DEPLOY_PATH || '~/pomelo-agency' }}
+
+            # Pull latest changes
+            git pull origin main
+
+            # Create .env file from secrets
+            cat > .env << 'EOF'
+            ${{ secrets.ENV_FILE }}
+            EOF
+
+            # Install pnpm if not exists
+            if ! command -v pnpm &> /dev/null; then
+              npm install -g pnpm
+            fi
+
+            # Install dependencies
+            pnpm install
+
+            # Generate Prisma client
+            pnpm run db:generate
+
+            # Run migrations
+            pnpm run db:migrate
+
+            # Build the project
+            pnpm run build
+
+            # Restart application with PM2
+            if command -v pm2 &> /dev/null; then
+              pm2 restart pomelo-agency || pm2 start npm --name "pomelo-agency" -- start
+              pm2 save
+            else
+              echo "PM2 not found. Please install PM2 or configure your process manager."
+            fi
+
+            echo "✅ Deployment completed successfully!"
