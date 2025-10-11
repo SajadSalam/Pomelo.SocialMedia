@@ -209,8 +209,9 @@ export async function createInstagramPost(
     const containerId = containerResponse.data.id
     console.log('✅ [Instagram API] Container created:', containerId)
 
-    // Step 2: For videos/reels, wait until processing is complete
-    if (params.media_type === 'VIDEO' || params.media_type === 'REELS') {
+    // Step 2: Wait until processing is complete (required for all media types)
+    // Instagram needs time to download and process media from external URLs
+    if (params.media_type !== 'CAROUSEL') {
       await pollContainerStatus(containerId, accessToken)
     }
 
@@ -280,8 +281,14 @@ export async function createInstagramCarousel(
     )
 
     const carouselId = carouselResponse.data.id
+    console.log('✅ [Instagram API] Carousel container created:', carouselId)
 
-    // Step 3: Publish the carousel
+    // Step 3: Wait for carousel to be ready
+    console.log('⏳ [Instagram API] Waiting for carousel to be ready...')
+    await pollContainerStatus(carouselId, accessToken)
+
+    // Step 4: Publish the carousel
+    console.log('📤 [Instagram API] Publishing carousel...')
     const publishResponse = await axios.post(
       `${GRAPH_API_BASE}/${instagramAccountId}/media_publish`,
       {

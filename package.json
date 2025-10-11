@@ -16,7 +16,14 @@
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "webhook:set": "tsx scripts/set-webhook.ts set",
+    "webhook:delete": "tsx scripts/set-webhook.ts delete",
+    "webhook:info": "tsx scripts/set-webhook.ts info"
+  },
+  "dependencies": {
+    "dotenv": "catalog:",
+    "form-data": "catalog:"
   },
   "devDependencies": {
     "@antfu/eslint-config": "catalog:dev",
@@ -26,29 +33,29 @@
     "@nuxt/eslint": "catalog:build",
     "@nuxtjs/color-mode": "catalog:build",
     "@pinia/nuxt": "catalog:build",
-    "@prisma/client": "^6.17.1",
-    "@types/bcryptjs": "^3.0.0",
-    "@types/formidable": "^3.4.6",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/node": "^24.7.2",
+    "@prisma/client": "catalog:",
+    "@types/bcryptjs": "catalog:",
+    "@types/formidable": "catalog:",
+    "@types/jsonwebtoken": "catalog:",
+    "@types/node": "catalog:",
     "@unocss/eslint-config": "catalog:build",
     "@unocss/nuxt": "catalog:build",
     "@vite-pwa/nuxt": "catalog:build",
     "@vueuse/core": "catalog:frontend",
     "@vueuse/nuxt": "catalog:build",
-    "axios": "^1.12.2",
-    "bcryptjs": "^3.0.2",
-    "bullmq": "^5.61.0",
+    "axios": "catalog:",
+    "bcryptjs": "catalog:",
+    "bullmq": "catalog:",
     "eslint": "catalog:dev",
     "eslint-plugin-format": "catalog:dev",
-    "formidable": "^3.5.4",
-    "ioredis": "^5.8.1",
-    "jsonwebtoken": "^9.0.2",
+    "formidable": "catalog:",
+    "ioredis": "catalog:",
+    "jsonwebtoken": "catalog:",
     "nuxt": "catalog:build",
     "pinia": "catalog:frontend",
-    "prisma": "^6.17.1",
-    "telegraf": "^4.16.3",
-    "tsx": "^4.20.6",
+    "prisma": "catalog:",
+    "telegraf": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:dev",
     "unocss": "catalog:build",
     "vue": "catalog:frontend",
@@ -60,8 +67,5 @@
     "nuxt": "catalog:build",
     "unplugin": "catalog:build",
     "vite": "catalog:build"
-  },
-  "dependencies": {
-    "form-data": "^4.0.4"
   }
 }

@@ -7,6 +7,7 @@ import prisma from '../../utils/prisma'
 
 interface WizardSession extends Scenes.SceneSession {
   clientId?: string
+  clientName?: string
   postType?: string
   mediaUrls?: string[]
   mediaIds?: string[]
@@ -30,20 +31,24 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     const clientsWithChannels = clients.filter(c => c.channels.length > 0)
 
     if (clientsWithChannels.length === 0) {
-      await ctx.reply('No clients with enabled channels found. Please configure clients in the dashboard first.')
+      await ctx.reply('❌ No clients with enabled channels found.\n\n'
+        + 'Please configure clients in the dashboard first.')
       return ctx.scene.leave()
     }
 
     const keyboard = Markup.inlineKeyboard(
       clientsWithChannels.map(client => [
         Markup.button.callback(
-          `${client.name} (${client.channels.length} channels)`,
+          `👤 ${client.name} • ${client.channels.length} ${client.channels.length === 1 ? 'channel' : 'channels'}`,
           `client:${client.id}`,
         ),
       ]),
     )
 
-    await ctx.reply('Select a client:', keyboard)
+    await ctx.reply('🎯 *Select a Client*\n\nChoose which client to create a post for:', {
+      parse_mode: 'Markdown',
+      ...keyboard,
+    })
     return ctx.wizard.next()
   },
   // Step 2: Handle client selection and ask for post type
@@ -62,13 +67,26 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     const session = ctx.scene.session as WizardSession
     session.clientId = clientId
 
+    // Get client name
+    const client = await prisma.client.findUnique({
+      where: { id: clientId },
+      select: { name: true },
+    })
+    session.clientName = client?.name || 'Unknown'
+
     await ctx.answerCbQuery()
-    await ctx.reply('Great! Now choose the post type:',
-      Markup.inlineKeyboard([
-        [Markup.button.callback('📷 Single Image', 'type:SINGLE_IMAGE')],
-        [Markup.button.callback('🎞️ Carousel (2-10 images)', 'type:CAROUSEL')],
-        [Markup.button.callback('🎥 Video', 'type:VIDEO')],
-      ]),
+    await ctx.editMessageText(
+      `✅ *Client Selected:* ${session.clientName}\n\n`
+      + '📝 *Choose Post Type*\n\n'
+      + 'Select the type of content you want to post:',
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('📷 Single Image', 'type:SINGLE_IMAGE')],
+          [Markup.button.callback('🎞️ Carousel (2-10 images)', 'type:CAROUSEL')],
+          [Markup.button.callback('🎥 Video/Reel', 'type:VIDEO')],
+        ]),
+      },
     )
     return ctx.wizard.next()
   },
@@ -88,21 +106,37 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     const session = ctx.scene.session as WizardSession
     session.postType = postType
     session.mediaUrls = []
+    session.mediaIds = []
 
     await ctx.answerCbQuery()
 
     let message = ''
+    let emoji = ''
     if (postType === 'SINGLE_IMAGE') {
-      message = 'Please send 1 image.'
+      emoji = '📷'
+      message = `${emoji} *Single Image Post*\n\n`
+        + '📤 Please send *1 image* file.\n\n'
+        + 'Recommended: 1080x1080px or 1080x1350px'
     }
     else if (postType === 'CAROUSEL') {
-      message = 'Please send 2-10 images (send them one by one, then type /done when finished).'
+      emoji = '🎞️'
+      message = `${emoji} *Carousel Post*\n\n`
+        + '📤 Please send *2-10 images* (send them one by one)\n\n'
+        + 'Type /done when finished uploading all images.\n\n'
+        + 'Recommended: 1080x1080px (square format)'
     }
     else if (postType === 'VIDEO') {
-      message = 'Please send 1 video.'
+      emoji = '🎥'
+      message = `${emoji} *Video/Reel Post*\n\n`
+        + '📤 Please send *1 video* file.\n\n'
+        + '• Max duration: 60 seconds (recommended)\n'
+        + '• Recommended: 1080x1920px (9:16 for Reels)'
     }
 
-    await ctx.reply(message)
+    await ctx.editMessageText(
+      `✅ *Post Type Selected:* ${postType.replace('_', ' ')}\n\n━━━━━━━━━━━━━━━━\n\n${message}`,
+      { parse_mode: 'Markdown' },
+    )
     return ctx.wizard.next()
   },
   // Step 4: Handle media uploads
@@ -236,17 +270,43 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     const session = ctx.scene.session as WizardSession
     session.caption = ctx.message.text
 
+    // Get client details with channels
+    const client = await prisma.client.findUnique({
+      where: { id: session.clientId! },
+      include: {
+        channels: {
+          where: { isEnabled: true },
+        },
+      },
+    })
+
+    const channelList = client?.channels
+      .map(ch => `  • ${ch.type === 'FACEBOOK_PAGE' ? '📘 Facebook' : '📸 Instagram'}: ${ch.name || 'Unnamed'}`)
+      .join('\n') || '  • No channels'
+
+    const postTypeDisplay = session.postType === 'SINGLE_IMAGE' ? '📷 Single Image'
+      : session.postType === 'CAROUSEL' ? '🎞️ Carousel'
+        : '🎥 Video/Reel'
+
     await ctx.reply(
-      `📝 Summary:\n\n`
-      + `Client: ${session.clientId}\n`
-      + `Type: ${session.postType}\n`
-      + `Media: ${session.mediaUrls?.length || 0} file(s)\n`
-      + `Caption: ${session.caption}\n\n`
-      + `Ready to publish?`,
-      Markup.inlineKeyboard([
-        [Markup.button.callback('✅ Publish Now', 'publish:now')],
-        [Markup.button.callback('❌ Cancel', 'publish:cancel')],
-      ]),
+      `━━━━━━━━━━━━━━━━\n`
+      + `📋 *POST PREVIEW*\n`
+      + `━━━━━━━━━━━━━━━━\n\n`
+      + `👤 *Client:* ${session.clientName}\n`
+      + `${postTypeDisplay} *Type:* ${session.postType?.replace('_', ' ')}\n`
+      + `📁 *Media Files:* ${session.mediaUrls?.length || 0}\n\n`
+      + `✍️ *Caption:*\n${session.caption}\n\n`
+      + `━━━━━━━━━━━━━━━━\n`
+      + `📢 *Will Publish To:*\n${channelList}\n`
+      + `━━━━━━━━━━━━━━━━\n\n`
+      + `Ready to publish this post?`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('✅ Publish Now', 'publish:now')],
+          [Markup.button.callback('❌ Cancel', 'publish:cancel')],
+        ]),
+      },
     )
     return ctx.wizard.next()
   },
@@ -258,15 +318,20 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     }
 
     const data = ctx.callbackQuery.data
-    await ctx.answerCbQuery()
 
     if (data === 'publish:cancel') {
-      await ctx.reply('Post creation cancelled.')
+      await ctx.answerCbQuery()
+      await ctx.reply('❌ *Post Cancelled*\n\nThe post was not created.\n\nType /new to start over.', {
+        parse_mode: 'Markdown',
+      })
       return ctx.scene.leave()
     }
 
     if (data === 'publish:now') {
       const session = ctx.scene.session as WizardSession
+      
+      await ctx.answerCbQuery()
+      await ctx.reply('⏳ Publishing your post...')
 
       try {
         // Create post
@@ -322,14 +387,29 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
             console.error('Failed to queue publications:', error)
           }
 
-          await ctx.reply(`✅ Post created and queued for publishing to ${publications.length} channel(s)!`)
+          const channelNames = client.channels.map(ch => 
+            ch.type === 'FACEBOOK_PAGE' ? `📘 ${ch.name || 'Facebook'}` : `📸 ${ch.name || 'Instagram'}`
+          ).join('\n  • ')
+
+          await ctx.reply(
+            `✅ *Post Published Successfully!*\n\n`
+            + `🚀 Your post is now being published to:\n\n`
+            + `  • ${channelNames}\n\n`
+            + `━━━━━━━━━━━━━━━━\n`
+            + `📊 View status in the dashboard\n`
+            + `📝 Post ID: \`${post.id}\`\n\n`
+            + `Type /new to create another post!`,
+            { parse_mode: 'Markdown' },
+          )
         }
         else {
           await ctx.reply('✅ Post created as draft. No enabled channels found.')
         }
       }
       catch (error: any) {
-        await ctx.reply(`❌ Failed to create post: ${error.message}`)
+        await ctx.reply(`❌ *Failed to Create Post*\n\n${error.message}\n\nPlease try again with /new`, {
+          parse_mode: 'Markdown',
+        })
       }
 
       return ctx.scene.leave()

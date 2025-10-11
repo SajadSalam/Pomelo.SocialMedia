@@ -1,4 +1,4 @@
-import { Scenes, Telegraf, session } from 'telegraf'
+import { Scenes, session, Telegraf } from 'telegraf'
 import { postWizard } from './scenes/postWizard'
 
 const config = useRuntimeConfig()
@@ -7,14 +7,14 @@ if (!config.telegramBotToken) {
   console.warn('⚠️ TELEGRAM_BOT_TOKEN not configured, bot will not start')
 }
 
-// Create bot instance
+// Create bot instance with scene context
 export const bot = config.telegramBotToken
-  ? new Telegraf(config.telegramBotToken)
+  ? new Telegraf<Scenes.SceneContext>(config.telegramBotToken)
   : null
 
 if (bot) {
   // Create stage with scenes
-  const stage = new Scenes.Stage<Scenes.SceneContext>([postWizard])
+  const stage = new Scenes.Stage<Scenes.SceneContext>([postWizard as any])
 
   // Use session middleware
   bot.use(session())
@@ -23,38 +23,50 @@ if (bot) {
   // Register commands
   bot.command('start', async (ctx) => {
     await ctx.reply(
-      'Welcome to Social Media Manager Bot! 🚀\n\n'
-      + 'Commands:\n'
-      + '/new - Create a new post\n'
-      + '/help - Show help',
+      '🚀 *Welcome to Social Media Manager Bot\\!*\n\n'
+      + '📱 Create and publish posts to Facebook and Instagram directly from Telegram\\.\n\n'
+      + '*Quick Start:*\n'
+      + '• Tap /new to create a post\n'
+      + '• Tap /help for more info\n\n'
+      + 'Let\'s get started\\! 🎉',
+      { parse_mode: 'MarkdownV2' },
     )
   })
 
   bot.command('help', async (ctx) => {
     await ctx.reply(
-      'Available commands:\n\n'
-      + '/new - Start the post creation wizard\n'
-      + '/cancel - Cancel current operation\n\n'
-      + 'The bot will guide you through creating posts that will be published to your configured Facebook and Instagram channels.',
+      '📚 *Available Commands*\n\n'
+      + '*Post Management:*\n'
+      + '• /new \\- Create a new post\n'
+      + '• /cancel \\- Cancel current operation\n\n'
+      + '*How it works:*\n'
+      + '1️⃣ Select your client\n'
+      + '2️⃣ Choose post type \\(image/carousel/video\\)\n'
+      + '3️⃣ Send your media files\n'
+      + '4️⃣ Add a caption\n'
+      + '5️⃣ Publish to all configured channels\\!\n\n'
+      + '✨ The bot automatically publishes to all enabled Facebook and Instagram channels for your selected client\\.',
+      { parse_mode: 'MarkdownV2' },
     )
   })
 
   bot.command('new', async (ctx) => {
-    await ctx.scene.enter('post-wizard')
+    if ('scene' in ctx) {
+      await (ctx as Scenes.SceneContext).scene.enter('post-wizard')
+    }
   })
 
   bot.command('cancel', async (ctx) => {
-    await ctx.scene.leave()
-    await ctx.reply('Operation cancelled.')
+    if ('scene' in ctx) {
+      await (ctx as Scenes.SceneContext).scene.leave()
+      await ctx.reply('Operation cancelled.')
+    }
   })
 
   // Handle unknown commands
   bot.on('message', async (ctx) => {
     await ctx.reply('Unknown command. Use /help to see available commands.')
   })
-
-  console.log('✅ Telegram bot initialized')
 }
 
 export default bot
-
