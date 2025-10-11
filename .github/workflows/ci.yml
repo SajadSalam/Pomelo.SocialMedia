@@ -11,7 +11,63 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Deploy to Ubuntu Server
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Create .env file
+        run: |
+          cat > .env << 'EOF'
+          ${{ secrets.ENV_FILE }}
+          EOF
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Generate Prisma client
+        run: pnpm run db:generate
+
+      - name: Build project
+        run: pnpm run build
+
+      - name: Install SSH Key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          password: ${{ secrets.SSH_PASSWORD }}
+          known_hosts: placeholder
+
+      - name: Add known hosts
+        run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy to server
+        run: |
+          # Create deployment package
+          rsync -avz --delete \
+            --exclude 'node_modules' \
+            --exclude '.git' \
+            --exclude '.nuxt' \
+            --exclude 'prisma/dev.db' \
+            --exclude 'public/uploads' \
+            .output/ \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/var/www/nuxt_social/.output/
+
+      - name: Transfer additional files
+        run: |
+          rsync -avz \
+            package.json \
+            pnpm-lock.yaml \
+            prisma/ \
+            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/var/www/nuxt_social/
+
+      - name: Complete deployment and restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -19,40 +75,21 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            # Navigate to project directory
             cd /var/www/nuxt_social
-
-            # Pull latest changes
-            git pull origin main
 
             # Create .env file from secrets
             cat > .env << 'EOF'
             ${{ secrets.ENV_FILE }}
             EOF
 
-            # Install pnpm if not exists
-            if ! command -v pnpm &> /dev/null; then
-              npm install -g pnpm
-            fi
+            # Install production dependencies only
+            pnpm install --prod
 
-            # Install dependencies
-            pnpm install
-
-            # Generate Prisma client
+            # Run database migrations
             pnpm run db:generate
-
-            # Run migrations
             pnpm run db:migrate
 
-            # Build the project
-            pnpm run build
-
-            # # Restart application with PM2
-            # if command -v pm2 &> /dev/null; then
-            #   pm2 restart nuxt_social || pm2 start npm --name "nuxt_social" -- start
-            #   pm2 save
-            # else
-            #   echo "PM2 not found. Please install PM2 or configure your process manager."
-            # fi
+            # Restart the service
+            sudo service Social restart
 
             echo "✅ Deployment completed successfully!"
