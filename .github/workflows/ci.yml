@@ -11,59 +11,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: pnpm
-
-      - name: Create .env file
-        run: |
-          cat > .env << 'EOF'
-          ${{ secrets.ENV_FILE }}
-          EOF
-
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm run db:generate
-
-      - name: Clean output directory
-        run: rm -rf .output
-
-      - name: Build project
-        run: pnpm run build
-
-      - name: Copy build to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          source: '.output/*'
-          target: /var/www/nuxt_social/
-          strip_components: 0
-
-      - name: Copy additional files to server
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USERNAME }}
-          password: ${{ secrets.SSH_PASSWORD }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          source: 'package.json,prisma/'
-          target: /var/www/nuxt_social/
-          strip_components: 0
-
-      - name: Deploy and restart service
+      - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -72,43 +20,46 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             echo "🚀 Starting deployment..."
-
+            
             # Navigate to project directory
             cd /var/www/nuxt_social
-
+            
+            # Pull latest changes from git
+            echo "📥 Pulling latest code..."
+            git pull origin main
+            
             # Create .env file from secrets
             echo "🔐 Creating .env file..."
             cat > .env << 'EOF'
             ${{ secrets.ENV_FILE }}
             EOF
-
-            # Remove old lock file if it exists (to avoid catalog reference issues)
-            if [ -f "pnpm-lock.yaml" ]; then
-              rm pnpm-lock.yaml
-              echo "🗑️  Removed old lock file"
-            fi
-
-            # Ensure prisma directory exists
-            mkdir -p prisma
-
-            # Install dependencies (need all deps for prisma commands)
+            
+            # Install dependencies
             echo "📦 Installing dependencies..."
             pnpm install --no-frozen-lockfile
-
+            
+            # Generate Prisma client
+            echo "🔧 Generating Prisma client..."
+            pnpm run db:generate
+            
             # Run database migrations
             echo "🗄️  Running migrations..."
-            pnpm run db:generate
             npx prisma migrate deploy
-
-            # Verify database was created
-            if [ ! -f "prisma/dev.db" ]; then
-              echo "⚠️  Warning: Database file not found at prisma/dev.db"
-            else
+            
+            # Verify database
+            if [ -f "prisma/dev.db" ]; then
               echo "✅ Database verified at prisma/dev.db"
+              ls -lh prisma/dev.db
+            else
+              echo "⚠️  Database file not found, may be using PostgreSQL"
             fi
-
+            
+            # Build the project
+            echo "🏗️  Building project..."
+            pnpm run build
+            
             # Restart the service
             echo "♻️  Restarting service..."
             sudo service Social restart
-
+            
             echo "✅ Deployment completed successfully!"
