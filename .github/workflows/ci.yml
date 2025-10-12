@@ -32,7 +32,7 @@ jobs:
 
             # Clone the repo
             echo "📥 Cloning repository..."
-            sudo git clone https://github.com/<your-username>/<your-repo>.git . 
+            sudo git clone https://github.com/SajadSalam/Pomelo.SocialMedia.git  .
 
             # Create .env file
             echo "🔐 Creating .env file..."
@@ -67,4 +67,3 @@ jobs:
             sudo systemctl restart Social.service
 
             echo "✅ Deployment completed successfully!"
-
