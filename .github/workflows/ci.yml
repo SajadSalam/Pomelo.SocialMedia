@@ -11,66 +11,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: lts/*
-          cache: pnpm
-
-      - name: Create .env file
-        run: |
-          cat > .env << 'EOF'
-          ${{ secrets.ENV_FILE }}
-          EOF
-
-      - name: Install dependencies
-        run: pnpm install --no-frozen-lockfile
-
-      - name: Generate Prisma client
-        run: pnpm run db:generate
-
-      - name: Clean output directory
-        run: rm -rf .output
-
-      - name: Build project
-        run: pnpm run build
-
-      - name: Install sshpass for password authentication
-        run: sudo apt-get update && sudo apt-get install -y sshpass
-
-      - name: Add known hosts
-        run: ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
-
       - name: Deploy to server
-        env:
-          SSHPASS: ${{ secrets.SSH_PASSWORD }}
-        run: |
-          # Create deployment package and transfer to server
-          # Preserve uploads directory on server
-          sshpass -e rsync -avz --delete \
-            --exclude 'public/uploads/*' \
-            -e "ssh -p ${{ secrets.SSH_PORT || 22 }}" \
-            .output/ \
-            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/var/www/nuxt_social/.output/
-
-      - name: Transfer additional files
-        env:
-          SSHPASS: ${{ secrets.SSH_PASSWORD }}
-        run: |
-          sshpass -e rsync -avz \
-            -e "ssh -p ${{ secrets.SSH_PORT || 22 }}" \
-            package.json \
-            pnpm-lock.yaml \
-            prisma/ \
-            ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/var/www/nuxt_social/
-
-      - name: Complete deployment and restart service
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -78,21 +19,39 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
+            echo "🚀 Starting deployment..."
+
+            # Navigate to project directory
             cd /var/www/nuxt_social
 
+            # Pull latest changes
+            echo "📥 Pulling latest code..."
+            git pull origin main
+
             # Create .env file from secrets
+            echo "🔐 Creating .env file..."
             cat > .env << 'EOF'
             ${{ secrets.ENV_FILE }}
             EOF
 
-            # Install production dependencies only
-            pnpm install --prod --no-frozen-lockfile
+            # Install dependencies
+            echo "📦 Installing dependencies..."
+            pnpm install --no-frozen-lockfile
+
+            # Generate Prisma client
+            echo "🔧 Generating Prisma client..."
+            pnpm run db:generate
 
             # Run database migrations
-            pnpm run db:generate
+            echo "🗄️  Running migrations..."
             pnpm run db:migrate
 
+            # Build the project
+            echo "🏗️  Building project..."
+            pnpm run build
+
             # Restart the service
+            echo "♻️  Restarting service..."
             sudo service Social restart
 
             echo "✅ Deployment completed successfully!"
