@@ -87,19 +87,19 @@ jobs:
               rm pnpm-lock.yaml
               echo "🗑️  Removed old lock file"
             fi
-            
+
             # Ensure prisma directory exists
             mkdir -p prisma
-            
+
             # Install dependencies (need all deps for prisma commands)
             echo "📦 Installing dependencies..."
             pnpm install --no-frozen-lockfile
-            
+
             # Run database migrations
             echo "🗄️  Running migrations..."
             pnpm run db:generate
             npx prisma migrate deploy
-            
+
             # Verify database was created
             if [ ! -f "prisma/dev.db" ]; then
               echo "⚠️  Warning: Database file not found at prisma/dev.db"
