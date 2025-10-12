@@ -48,8 +48,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: ".output/*"
-          target: "/var/www/nuxt_social/"
+          source: '.output/*'
+          target: /var/www/nuxt_social/
           strip_components: 0
 
       - name: Copy additional files to server
@@ -59,8 +59,8 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: "package.json,pnpm-lock.yaml,prisma/"
-          target: "/var/www/nuxt_social/"
+          source: 'package.json,pnpm-lock.yaml,prisma/'
+          target: /var/www/nuxt_social/
           strip_components: 0
 
       - name: Deploy and restart service
@@ -72,27 +72,27 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             echo "🚀 Starting deployment..."
-            
+
             # Navigate to project directory
             cd /var/www/nuxt_social
-            
+
             # Create .env file from secrets
             echo "🔐 Creating .env file..."
             cat > .env << 'EOF'
             ${{ secrets.ENV_FILE }}
             EOF
-            
+
             # Install production dependencies
             echo "📦 Installing production dependencies..."
             pnpm install --prod --no-frozen-lockfile
-            
+
             # Run database migrations
             echo "🗄️  Running migrations..."
             pnpm run db:generate
             pnpm run db:migrate
-            
+
             # Restart the service
             echo "♻️  Restarting service..."
             sudo service Social restart
-            
+
             echo "✅ Deployment completed successfully!"

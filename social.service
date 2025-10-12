@@ -1,0 +1,28 @@
+[Unit]
+Description=Pomelo Agency - Social Media Management Platform
+Documentation=https://github.com/your-repo/pomelo-agency
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/nuxt_social
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+ExecStart=/usr/bin/node /var/www/nuxt_social/.output/server/index.mjs
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=social
+
+# Security settings
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits (adjust as needed)
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+

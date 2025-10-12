@@ -2,14 +2,21 @@
 
 This guide will help you set up automated deployment to your Ubuntu server using GitHub Actions.
 
+## Deployment Strategy
+
+This CI/CD pipeline uses a **build-then-transfer** approach with appleboy actions:
+1. ✅ Code is built on GitHub Actions (fast, doesn't consume server resources)
+2. ✅ Built files are transferred to server using `appleboy/scp-action`
+3. ✅ Final deployment steps via `appleboy/ssh-action`
+4. ✅ Service is restarted automatically with `systemd`
+
 ## Prerequisites
 
 1. **Ubuntu Server** with SSH access
-2. **Git** installed on the server
-3. **Node.js** (LTS version) and **pnpm** installed on the server
-4. **PM2** (optional but recommended) for process management
-5. **Redis** server running (for BullMQ job queue)
-6. **PostgreSQL** or SQLite for database
+2. **Node.js** (LTS version) and **pnpm** installed on the server
+3. **systemd** service configured (for process management)
+4. **Redis** server running (for BullMQ job queue)
+5. **PostgreSQL** or SQLite for database
 
 ## Server Setup
 
@@ -28,9 +35,6 @@ nvm use --lts
 # Install pnpm
 npm install -g pnpm
 
-# Install PM2 for process management
-npm install -g pm2
-
 # Install Redis (for job queue)
 sudo apt install redis-server -y
 sudo systemctl enable redis-server
@@ -40,27 +44,93 @@ sudo systemctl start redis-server
 sudo apt install postgresql postgresql-contrib -y
 ```
 
-### 2. Clone Repository on Server
+### 2. Create Project Directory
 
 ```bash
-# Navigate to your desired directory
-cd ~
+# Create the directory
+sudo mkdir -p /var/www/nuxt_social
 
-# Clone the repository
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git pomelo-agency
-cd pomelo-agency
-
-# Set up Git to pull without conflicts
-git config pull.rebase false
+# Set ownership (replace 'your-user' with your SSH username)
+sudo chown -R $USER:$USER /var/www/nuxt_social
 ```
 
-### 3. Set Up PM2 Startup
+### 3. Set Up systemd Service
+
+Copy the `social.service` file from your repo to the server, or create it manually:
 
 ```bash
-# Generate PM2 startup script
-pm2 startup
+# Create the service file
+sudo nano /etc/systemd/system/Social.service
+```
 
-# Follow the instructions provided by the command above
+Paste this content (adjust paths and user as needed):
+
+```ini
+[Unit]
+Description=Pomelo Agency - Social Media Management Platform
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/var/www/nuxt_social
+Environment="NODE_ENV=production"
+Environment="PORT=3000"
+ExecStart=/usr/bin/node /var/www/nuxt_social/.output/server/index.mjs
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=social
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable service to start on boot
+sudo systemctl enable Social
+
+# Start the service (will fail initially until first deployment)
+# sudo systemctl start Social
+
+# Check status
+sudo systemctl status Social
+```
+
+### 4. Enable SSH Password Authentication
+
+Ensure password authentication is enabled in your SSH config:
+
+```bash
+# Edit SSH config
+sudo nano /etc/ssh/sshd_config
+
+# Ensure these lines are present and not commented:
+PasswordAuthentication yes
+PubkeyAuthentication yes
+
+# Restart SSH service
+sudo systemctl restart sshd
+```
+
+**Security Note:** For better security, consider using SSH key authentication instead of passwords in production.
+
+### 5. Configure Sudo Permissions for Service Restart
+
+The CI/CD pipeline needs to restart the service without a password prompt:
+
+```bash
+# Edit sudoers file
+sudo visudo
+
+# Add this line (replace 'your-user' with your SSH username)
+your-user ALL=(ALL) NOPASSWD: /usr/sbin/service Social restart
 ```
 
 ## GitHub Secrets Configuration
@@ -79,16 +149,10 @@ Add the following secrets:
    - Your SSH username (usually `root` or your user)
    - Example: `ubuntu` or `root`
 
-3. **SSH_PRIVATE_KEY**
-   - Your SSH private key (the entire content of your `~/.ssh/id_rsa` or similar)
-   - To generate a new SSH key pair:
-     ```bash
-     ssh-keygen -t rsa -b 4096 -C "github-actions"
-     # Copy the private key content:
-     cat ~/.ssh/id_rsa
-     # Add the public key to server's authorized_keys:
-     cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
-     ```
+3. **SSH_PASSWORD**
+   - Your SSH user password
+   - **Required for appleboy actions (scp and ssh)**
+   - Make sure your server allows password authentication in SSH config
 
 4. **ENV_FILE**
    - Your complete `.env` file content
@@ -109,10 +173,6 @@ Add the following secrets:
    - Custom SSH port if you're not using the default
    - Example: `2222`
 
-6. **DEPLOY_PATH** (optional, defaults to `~/pomelo-agency`)
-   - The path where your project is located on the server
-   - Example: `/var/www/pomelo-agency`
-
 ## Testing the Deployment
 
 Once you've set up all the secrets:
@@ -123,76 +183,95 @@ Once you've set up all the secrets:
 4. Watch the workflow run
 
 The deployment will:
-- ✅ Run linting checks
-- ✅ Run type checks
-- ✅ Deploy to your server (only on main branch)
-- ✅ Copy .env file
-- ✅ Install dependencies
+- ✅ Checkout code on GitHub Actions runner
+- ✅ Setup Node.js and pnpm
+- ✅ Install dependencies and build the project on GitHub Actions (fast!)
+- ✅ Transfer built files to server using `appleboy/scp-action`
+- ✅ SSH into server using `appleboy/ssh-action`
+- ✅ Copy .env file to server
+- ✅ Install production dependencies on server
 - ✅ Run database migrations
-- ✅ Build the project
-- ✅ Restart the application with PM2
+- ✅ Restart the application with `service Social restart`
 
 ## Manual Deployment (Optional)
 
-If you need to deploy manually:
+If you need to deploy manually from your local machine:
 
 ```bash
-# SSH into your server
-ssh your-username@your-server-ip
-
-# Navigate to project
-cd ~/pomelo-agency
-
-# Pull latest changes
-git pull origin main
-
-# Install dependencies
+# Build locally
 pnpm install
-
-# Run migrations
 pnpm run db:generate
-pnpm run db:migrate
-
-# Build
 pnpm run build
 
-# Restart with PM2
-pm2 restart pomelo-agency || pm2 start npm --name "pomelo-agency" -- start
-pm2 save
+# Transfer to server (adjust paths as needed)
+# You'll need rsync or scp installed
+scp -r .output/ your-user@your-server:/var/www/nuxt_social/
+scp package.json pnpm-lock.yaml your-user@your-server:/var/www/nuxt_social/
+scp -r prisma/ your-user@your-server:/var/www/nuxt_social/
+
+# SSH into server and restart
+ssh your-user@your-server
+cd /var/www/nuxt_social
+pnpm install --prod
+pnpm run db:migrate
+sudo service Social restart
 ```
 
 ## Viewing Logs
 
 ```bash
-# View PM2 logs
-pm2 logs pomelo-agency
+# View service logs
+sudo journalctl -u Social -f
 
-# View specific number of lines
-pm2 logs pomelo-agency --lines 100
+# View last 100 lines
+sudo journalctl -u Social -n 100
 
-# Monitor in real-time
-pm2 monit
+# View logs from today
+sudo journalctl -u Social --since today
+
+# View logs with priority (errors only)
+sudo journalctl -u Social -p err
+
+# Check service status
+sudo systemctl status Social
 ```
 
 ## Troubleshooting
 
 ### Deployment fails with "Permission denied"
-- Ensure your SSH key is correctly added to GitHub Secrets
-- Verify the public key is in `~/.ssh/authorized_keys` on the server
+- Ensure your SSH password is correctly added to GitHub Secrets
+- Verify password authentication is enabled in `/etc/ssh/sshd_config`
+- Check user has write permissions to `/var/www/nuxt_social`
 
 ### Application won't start
-- Check PM2 logs: `pm2 logs pomelo-agency`
-- Verify all environment variables are correct
+- Check service logs: `sudo journalctl -u Social -n 100`
+- Verify all environment variables are correct in `/var/www/nuxt_social/.env`
 - Ensure Redis is running: `sudo systemctl status redis-server`
+- Check service status: `sudo systemctl status Social`
 
 ### Database migration errors
 - Check your DATABASE_URL in .env
 - Ensure database is accessible
-- Try running migrations manually: `pnpm run db:migrate`
+- Try running migrations manually:
+  ```bash
+  cd /var/www/nuxt_social
+  pnpm run db:migrate
+  ```
+
+### Service restart fails
+- Verify sudo permissions are configured correctly
+- Check: `sudo visudo` for the NOPASSWD line
+- Try restarting manually: `sudo service Social restart`
+
+### SCP transfer fails
+- Check directory permissions: `ls -la /var/www/nuxt_social`
+- Ensure user owns the directory: `sudo chown -R $USER:$USER /var/www/nuxt_social`
+- Verify SSH password authentication is enabled
 
 ### Port already in use
 - Check what's running on port 3000: `sudo lsof -i :3000`
-- Kill the process or change the port in your .env
+- Kill the process: `sudo kill -9 <PID>`
+- Or change the port in your systemd service file
 
 ## Setting Up SSL/HTTPS (Recommended)
 
