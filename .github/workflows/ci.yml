@@ -4,12 +4,10 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
 
     steps:
       - name: Deploy to server
@@ -20,149 +18,58 @@ jobs:
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            set -e  # Exit on error
-
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "🚀 Starting deployment..."
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo ""
-
-            # Ensure directory exists
             if [ ! -d "/var/www/nuxt_social2" ]; then
-              echo "📁 Creating directory /var/www/nuxt_social2..."
+              echo "📁 Directory /var/www/nuxt_social2 not found, creating it..."
               sudo mkdir -p /var/www/nuxt_social2
-              sudo chown -R $USER:$USER /var/www/nuxt_social2
             fi
 
             cd /var/www/nuxt_social2 || exit 1
 
-            # Backup .env if exists
-            if [ -f ".env" ]; then
-              echo "💾 Backing up .env file..."
-              cp .env .env.backup
-            fi
-
-            # Backup database if exists
-            if [ -f "prisma/dev.db" ]; then
-              echo "💾 Backing up database..."
-              cp prisma/dev.db prisma/dev.db.backup
-            fi
-
-            # Clean up old files (preserve backups)
+            # Remove everything in the folder
             echo "🧹 Cleaning up old files..."
-            find . -mindepth 1 -maxdepth 1 ! -name '.env.backup' ! -name 'prisma' ! -name 'node_modules' -exec sudo rm -rf {} +
+            sudo rm -rf ./*
 
             # Clone the repo
             echo "📥 Cloning repository..."
-            git clone https://github.com/SajadSalam/Pomelo.SocialMedia.git temp_clone
+            sudo git clone https://github.com/SajadSalam/Pomelo.SocialMedia.git
 
-            # Move files
-            echo "📦 Moving files..."
-            shopt -s dotglob
-            mv temp_clone/* .
-            rm -rf temp_clone
+            # mv Pomelo.SocialMedia to nuxt_social2
+            echo "🔍 Moving Pomelo.SocialMedia to nuxt_social2..."
+            sudo mv Pomelo.SocialMedia/* .
+            sudo mv Pomelo.SocialMedia/.* .
+            sudo rm -rf Pomelo.SocialMedia
 
-            # Restore .env
-            if [ -f ".env.backup" ]; then
-              echo "🔐 Restoring .env file..."
-              mv .env.backup .env
-            else
-              echo "🔐 Creating .env file from secrets..."
-              echo "${{ secrets.ENV_FILE }}" > .env
-            fi
-
-            # Restore database
-            if [ -f "prisma/dev.db.backup" ]; then
-              echo "🗄️  Restoring database..."
-              mv prisma/dev.db.backup prisma/dev.db
-            fi
+            # Create .env file
+            echo "🔐 Creating .env file..."
+            echo "${{ secrets.ENV_FILE }}" > .env
 
             # Install dependencies
             echo "📦 Installing dependencies..."
-            pnpm install --frozen-lockfile || pnpm install
+            pnpm install --no-frozen-lockfile
 
-            # Generate Prisma client (always)
+            # Generate Prisma client
             echo "🔧 Generating Prisma client..."
-            pnpm db:generate
+            pnpm run db:generate
 
-            # Setup database
-            echo "🗄️  Setting up database..."
-            if [ -f "prisma/migrations" ]; then
-              echo "Running migrations..."
-              pnpm db:deploy || pnpm db:push
-            else
-              echo "Using db push (no migrations)..."
-              pnpm db:push
-            fi
-
-            # Verify Prisma Client
-            if [ -d "node_modules/.prisma/client" ]; then
-              echo "✅ Prisma Client generated successfully"
-            else
-              echo "❌ Prisma Client not found! Regenerating..."
-              pnpm db:generate
-            fi
+            # Run database migrations
+            echo "🗄️  Running migrations..."
+            npx prisma migrate deploy
 
             # Verify database
             if [ -f "prisma/dev.db" ]; then
-              echo "✅ Database verified"
+              echo "✅ Database verified at prisma/dev.db"
               ls -lh prisma/dev.db
             else
-              echo "⚠️  SQLite database not found (may be using different DB)"
+              echo "⚠️  Database file not found, may be using PostgreSQL"
             fi
 
             # Build the project
-            echo "🏗️  Building application..."
-            pnpm build
+            echo "🏗️  Building project..."
+            pnpm run build
 
-            # Verify build output
-            if [ -f ".output/server/index.mjs" ]; then
-              echo "✅ Build output verified"
-            else
-              echo "❌ Build output not found!"
-              exit 1
-            fi
-
-            # Restart service
+            # Restart the service
             echo "♻️  Restarting service..."
+            sudo systemctl restart Social.service
 
-            # Try PM2 first
-            if command -v pm2 &> /dev/null; then
-              echo "Using PM2..."
-              pm2 restart social-media-manager 2>/dev/null || pm2 start ecosystem.config.cjs
-              pm2 save
-              echo "✅ PM2 service restarted"
-            # Then try systemd
-            elif systemctl is-active --quiet Social.service 2>/dev/null; then
-              echo "Using systemd..."
-              sudo systemctl restart Social.service
-              echo "✅ Systemd service restarted"
-            else
-              echo "⚠️  No service manager found (PM2 or systemd)"
-              echo "💡 Please manually start the application with:"
-              echo "   pm2 start ecosystem.config.cjs"
-              echo "   OR"
-              echo "   pnpm start"
-            fi
-
-            # Check service status
-            echo ""
-            echo "🔍 Checking service status..."
-            if command -v pm2 &> /dev/null; then
-              pm2 list | grep social-media-manager || echo "Service not running with PM2"
-            fi
-
-            echo ""
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             echo "✅ Deployment completed successfully!"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo ""
-            echo "📊 Deployment Summary:"
-            echo "   - Dependencies: Installed"
-            echo "   - Prisma Client: Generated"
-            echo "   - Database: Ready"
-            echo "   - Build: Completed"
-            echo "   - Service: Restarted"
-            echo ""
-            echo "🌐 Application should be running!"
-            echo ""
