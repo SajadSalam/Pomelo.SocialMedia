@@ -32,7 +32,13 @@ jobs:
 
             # Clone the repo
             echo "📥 Cloning repository..."
-            sudo git clone https://github.com/SajadSalam/Pomelo.SocialMedia.git  .
+            sudo git clone https://github.com/SajadSalam/Pomelo.SocialMedia.git
+
+            # mv Pomelo.SocialMedia to nuxt_social2
+            echo "🔍 Moving Pomelo.SocialMedia to nuxt_social2..."
+            sudo mv Pomelo.SocialMedia/* .
+            sudo mv Pomelo.SocialMedia/.* .
+            sudo rm -rf Pomelo.SocialMedia
 
             # Create .env file
             echo "🔐 Creating .env file..."
