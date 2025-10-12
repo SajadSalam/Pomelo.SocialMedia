@@ -59,7 +59,7 @@ jobs:
           username: ${{ secrets.SSH_USERNAME }}
           password: ${{ secrets.SSH_PASSWORD }}
           port: ${{ secrets.SSH_PORT || 22 }}
-          source: 'package.json,pnpm-lock.yaml,prisma/'
+          source: 'package.json,prisma/'
           target: /var/www/nuxt_social/
           strip_components: 0
 
@@ -82,12 +82,18 @@ jobs:
             ${{ secrets.ENV_FILE }}
             EOF
 
-            # Install production dependencies
-            echo "📦 Installing production dependencies..."
-            pnpm install --prod --no-frozen-lockfile
+            # Remove old lock file if it exists (to avoid catalog reference issues)
+            if [ -f "pnpm-lock.yaml" ]; then
+              rm pnpm-lock.yaml
+              echo "🗑️  Removed old lock file"
+            fi
             
             # Ensure prisma directory exists
             mkdir -p prisma
+            
+            # Install dependencies (need all deps for prisma commands)
+            echo "📦 Installing dependencies..."
+            pnpm install --no-frozen-lockfile
             
             # Run database migrations
             echo "🗄️  Running migrations..."
