@@ -12,7 +12,6 @@ import {
 import prisma from '../utils/prisma'
 
 let _publishWorker: Worker | null = null
-let _connection: Redis | null = null
 
 function initializeWorker() {
   if (_publishWorker) {
@@ -37,7 +36,6 @@ function initializeWorker() {
       lazyConnect: true,
     })
     
-    _connection = connection
 
     // Handle connection errors gracefully
     connection.on('error', (err: any) => {

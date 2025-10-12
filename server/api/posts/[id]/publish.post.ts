@@ -73,7 +73,7 @@ export default defineEventHandler(async (event) => {
     try {
       const { getPublishQueue } = await import('../../../../server/utils/queue')
       const publishQueue = getPublishQueue()
-      
+
       for (const publication of publications) {
         await publishQueue.add('publish-post', {
           publicationId: publication.id,
@@ -98,4 +98,3 @@ export default defineEventHandler(async (event) => {
     })
   }
 })
-
