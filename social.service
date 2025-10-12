@@ -5,7 +5,7 @@ After=network.target redis-server.service
 
 [Service]
 Type=simple
-User=www-data
+User=root
 WorkingDirectory=/var/www/nuxt_social
 Environment="NODE_ENV=production"
 Environment="PORT=3000"
@@ -15,10 +15,6 @@ RestartSec=10
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=social
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
 
 # Resource limits (adjust as needed)
 LimitNOFILE=65536
