@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.17.1",
   "scripts": {
-    "build": "nuxt build",
+    "build": "prisma generate && nuxt build",
     "dev:pwa": "VITE_PLUGIN_PWA=true nuxt dev",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
@@ -14,14 +14,20 @@
     "lint": "eslint .",
     "typecheck": "nuxt typecheck",
     "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
+    "db:push": "prisma db push",
+    "postinstall": "prisma generate",
     "webhook:set": "tsx scripts/set-webhook.ts set",
     "webhook:delete": "tsx scripts/set-webhook.ts delete",
-    "webhook:info": "tsx scripts/set-webhook.ts info"
+    "webhook:info": "tsx scripts/set-webhook.ts info",
+    "deploy": "bash scripts/deploy.sh",
+    "prod:setup": "bash scripts/production-setup.sh"
   },
   "dependencies": {
+    "@prisma/client": "catalog:",
     "dotenv": "catalog:",
     "form-data": "catalog:"
   },
@@ -33,7 +39,6 @@
     "@nuxt/eslint": "catalog:build",
     "@nuxtjs/color-mode": "catalog:build",
     "@pinia/nuxt": "catalog:build",
-    "@prisma/client": "catalog:",
     "@types/bcryptjs": "catalog:",
     "@types/formidable": "catalog:",
     "@types/jsonwebtoken": "catalog:",
