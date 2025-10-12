@@ -69,9 +69,11 @@ export default defineEventHandler(async (event) => {
       ),
     )
 
-    // Queue publishing jobs (will implement with BullMQ later)
+    // Queue publishing jobs
     try {
-      const { publishQueue } = await import('../../../../server/utils/queue')
+      const { getPublishQueue } = await import('../../../../server/utils/queue')
+      const publishQueue = getPublishQueue()
+      
       for (const publication of publications) {
         await publishQueue.add('publish-post', {
           publicationId: publication.id,

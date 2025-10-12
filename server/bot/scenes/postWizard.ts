@@ -376,7 +376,9 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
 
           // Queue publishing jobs
           try {
-            const { publishQueue } = await import('../../utils/queue')
+            const { getPublishQueue } = await import('../../utils/queue')
+            const publishQueue = getPublishQueue()
+            
             for (const publication of publications) {
               await publishQueue.add('publish-post', {
                 publicationId: publication.id,

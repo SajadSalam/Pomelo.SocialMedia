@@ -51,7 +51,6 @@ jobs:
           # Create deployment package
           sshpass -e rsync -avz --delete \
             --exclude 'node_modules' \
-            --exclude '.git' \
             --exclude '.nuxt' \
             --exclude 'prisma/dev.db' \
             --exclude 'public/uploads' \

@@ -1,5 +1,5 @@
 import prisma from '../../../../server/utils/prisma'
-import { publishQueue } from '../../../../server/utils/queue'
+import { getPublishQueue } from '../../../../server/utils/queue'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
     })
 
     // Re-queue the job
+    const publishQueue = getPublishQueue()
     await publishQueue.add('publish-post', {
       publicationId,
       postRequestId: publication.postRequest.id,

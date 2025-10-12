@@ -1,28 +1,58 @@
 /* eslint-disable no-console */
-import { Worker } from 'bullmq'
-import Redis from 'ioredis'
+import type { Worker } from 'bullmq'
+import type Redis from 'ioredis'
 import {
-    createFacebookCarousel,
-    createFacebookPost,
-    createInstagramCarousel,
-    createInstagramPost,
-    uploadPhoto,
-    uploadVideo,
+  createFacebookCarousel,
+  createFacebookPost,
+  createInstagramCarousel,
+  createInstagramPost,
+  uploadPhoto,
+  uploadVideo,
 } from '../utils/facebook'
 import prisma from '../utils/prisma'
 
-const config = useRuntimeConfig()
+let _publishWorker: Worker | null = null
+let _connection: Redis | null = null
 
-// Create Redis connection
-const connection = new Redis(config.redisUrl, {
-  maxRetriesPerRequest: null,
-  enableReadyCheck: false,
-})
+function initializeWorker() {
+  if (_publishWorker) {
+    return _publishWorker
+  }
 
-// Create worker for publish-post queue
-const publishWorker = new Worker(
+  // Only initialize if we're in a server context (not during build)
+  if (typeof process === 'undefined' || !process.server) {
+    console.log('⏭️  Skipping worker initialization (not in server context)')
+    return null
+  }
+
+  try {
+    const { Worker } = require('bullmq')
+    const Redis = require('ioredis')
+    const config = useRuntimeConfig()
+
+    // Create Redis connection
+    const connection = new Redis(config.redisUrl, {
+      maxRetriesPerRequest: null,
+      enableReadyCheck: false,
+      lazyConnect: true,
+    })
+    
+    _connection = connection
+
+    // Handle connection errors gracefully
+    connection.on('error', (err: any) => {
+      console.error('Redis connection error in worker:', err.message)
+    })
+
+    // Connect to Redis
+    connection.connect().catch((err: any) => {
+      console.error('Failed to connect to Redis in worker:', err.message)
+    })
+
+    // Create worker for publish-post queue
+    _publishWorker = new Worker(
   'publish-post',
-  async (job) => {
+  async (job: any) => {
     const { publicationId } = job.data
 
     console.log(`Processing publication ${publicationId}`)
@@ -323,14 +353,30 @@ const publishWorker = new Worker(
   },
 )
 
-publishWorker.on('completed', (job) => {
-  console.log(`✅ Job ${job.id} completed`)
-})
+    if (_publishWorker) {
+      _publishWorker.on('completed', (job: any) => {
+        console.log(`✅ Job ${job.id} completed`)
+      })
 
-publishWorker.on('failed', (job, err) => {
-  console.error(`❌ Job ${job?.id} failed:`, err.message)
-})
+      _publishWorker.on('failed', (job: any, err: any) => {
+        console.error(`❌ Job ${job?.id} failed:`, err.message)
+      })
 
-console.log('✅ Publishing worker started')
+      console.log('✅ Publishing worker started')
+    }
 
-export default publishWorker
+    return _publishWorker
+  }
+  catch (error: any) {
+    console.error('Failed to initialize worker:', error.message)
+    return null
+  }
+}
+
+// Export function to get worker
+export function getPublishWorker() {
+  return initializeWorker()
+}
+
+// Default export for backward compatibility
+export default getPublishWorker()
