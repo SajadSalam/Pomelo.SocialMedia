@@ -85,11 +85,21 @@ jobs:
             # Install production dependencies
             echo "📦 Installing production dependencies..."
             pnpm install --prod --no-frozen-lockfile
-
+            
+            # Ensure prisma directory exists
+            mkdir -p prisma
+            
             # Run database migrations
             echo "🗄️  Running migrations..."
             pnpm run db:generate
-            pnpm run db:migrate
+            npx prisma migrate deploy
+            
+            # Verify database was created
+            if [ ! -f "prisma/dev.db" ]; then
+              echo "⚠️  Warning: Database file not found at prisma/dev.db"
+            else
+              echo "✅ Database verified at prisma/dev.db"
+            fi
 
             # Restart the service
             echo "♻️  Restarting service..."

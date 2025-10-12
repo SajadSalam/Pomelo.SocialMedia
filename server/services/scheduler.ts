@@ -58,7 +58,7 @@ export async function checkScheduledPosts() {
       // Queue publishing jobs
       try {
         const { getPublishQueue } = await import('../utils/queue')
-        const publishQueue = getPublishQueue()
+        const publishQueue = await getPublishQueue()
         
         for (const publication of publications) {
           await publishQueue.add('publish-post', {

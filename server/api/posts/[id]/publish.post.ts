@@ -72,8 +72,8 @@ export default defineEventHandler(async (event) => {
     // Queue publishing jobs
     try {
       const { getPublishQueue } = await import('../../../../server/utils/queue')
-      const publishQueue = getPublishQueue()
-
+      const publishQueue = await getPublishQueue()
+      
       for (const publication of publications) {
         await publishQueue.add('publish-post', {
           publicationId: publication.id,

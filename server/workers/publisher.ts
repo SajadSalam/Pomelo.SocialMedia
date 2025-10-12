@@ -1,19 +1,18 @@
 /* eslint-disable no-console */
 import type { Worker } from 'bullmq'
-import type Redis from 'ioredis'
 import {
-  createFacebookCarousel,
-  createFacebookPost,
-  createInstagramCarousel,
-  createInstagramPost,
-  uploadPhoto,
-  uploadVideo,
+    createFacebookCarousel,
+    createFacebookPost,
+    createInstagramCarousel,
+    createInstagramPost,
+    uploadPhoto,
+    uploadVideo,
 } from '../utils/facebook'
 import prisma from '../utils/prisma'
 
 let _publishWorker: Worker | null = null
 
-function initializeWorker() {
+async function initializeWorker() {
   if (_publishWorker) {
     return _publishWorker
   }
@@ -25,8 +24,12 @@ function initializeWorker() {
   }
 
   try {
-    const { Worker } = require('bullmq')
-    const Redis = require('ioredis')
+    // Use dynamic imports for ESM compatibility
+    const [{ Worker }, Redis] = await Promise.all([
+      import('bullmq'),
+      import('ioredis').then(m => m.default),
+    ])
+    
     const config = useRuntimeConfig()
 
     // Create Redis connection

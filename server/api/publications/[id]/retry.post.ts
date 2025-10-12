@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
     })
 
     // Re-queue the job
-    const publishQueue = getPublishQueue()
+    const publishQueue = await getPublishQueue()
     await publishQueue.add('publish-post', {
       publicationId,
       postRequestId: publication.postRequest.id,

@@ -7,7 +7,7 @@ let _publishQueue: Queue | null = null
 let _insightsQueue: Queue | null = null
 let _initialized = false
 
-function initializeQueues() {
+async function initializeQueues() {
   if (_initialized) {
     return
   }
@@ -15,8 +15,12 @@ function initializeQueues() {
   try {
     // Only initialize if we're in a server context (not during build)
     if (typeof process !== 'undefined' && process.server) {
-      const { Queue } = require('bullmq')
-      const Redis = require('ioredis')
+      // Use dynamic imports for ESM compatibility
+      const [{ Queue }, Redis] = await Promise.all([
+        import('bullmq'),
+        import('ioredis').then(m => m.default),
+      ])
+      
       const config = useRuntimeConfig()
 
       // Create Redis connection
@@ -82,9 +86,9 @@ function initializeQueues() {
 }
 
 // Getter functions for lazy initialization
-export function getPublishQueue(): Queue {
+export async function getPublishQueue(): Promise<Queue> {
   if (!_publishQueue) {
-    initializeQueues()
+    await initializeQueues()
   }
   if (!_publishQueue) {
     throw new Error('Publish queue not initialized. Redis connection may have failed.')
@@ -92,9 +96,9 @@ export function getPublishQueue(): Queue {
   return _publishQueue
 }
 
-export function getInsightsQueue(): Queue {
+export async function getInsightsQueue(): Promise<Queue> {
   if (!_insightsQueue) {
-    initializeQueues()
+    await initializeQueues()
   }
   if (!_insightsQueue) {
     throw new Error('Insights queue not initialized. Redis connection may have failed.')
@@ -102,16 +106,6 @@ export function getInsightsQueue(): Queue {
   return _insightsQueue
 }
 
-// Legacy exports for backward compatibility (will initialize on first access)
-export const publishQueue = new Proxy({} as Queue, {
-  get(target, prop) {
-    return getPublishQueue()[prop as keyof Queue]
-  },
-})
-
-export const insightsQueue = new Proxy({} as Queue, {
-  get(target, prop) {
-    return getInsightsQueue()[prop as keyof Queue]
-  },
-})
+// Note: Use getPublishQueue() and getInsightsQueue() instead of direct exports
+// since initialization is now async
 
