@@ -35,6 +35,9 @@ jobs:
       - name: Generate Prisma client
         run: pnpm run db:generate
 
+      - name: Clean output directory
+        run: rm -rf .output
+
       - name: Build project
         run: pnpm run build
 
@@ -48,12 +51,10 @@ jobs:
         env:
           SSHPASS: ${{ secrets.SSH_PASSWORD }}
         run: |
-          # Create deployment package
+          # Create deployment package and transfer to server
+          # Preserve uploads directory on server
           sshpass -e rsync -avz --delete \
-            --exclude 'node_modules' \
-            --exclude '.nuxt' \
-            --exclude 'prisma/dev.db' \
-            --exclude 'public/uploads' \
+            --exclude 'public/uploads/*' \
             -e "ssh -p ${{ secrets.SSH_PORT || 22 }}" \
             .output/ \
             ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:/var/www/nuxt_social/.output/

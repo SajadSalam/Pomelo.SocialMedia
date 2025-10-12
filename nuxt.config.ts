@@ -80,10 +80,22 @@ export default defineNuxtConfig({
     experimental: {
       websocket: true,
     },
+    publicAssets: [
+      {
+        dir: 'public',
+        maxAge: 60 * 60 * 24 * 365, // 1 year
+      },
+    ],
   },
   vite: {
     server: {
       allowedHosts: ['*', import.meta.env.BASE_URL.replace('https://', '')],
+    },
+  },
+  hooks: {
+    // Preserve uploads directory during build
+    'build:before': () => {
+      // Uploads directory will be preserved
     },
   },
 

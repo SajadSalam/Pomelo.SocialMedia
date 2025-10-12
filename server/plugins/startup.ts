@@ -1,4 +1,16 @@
 export default defineNitroPlugin(async (nitroApp) => {
+  // Skip background services during build/prerender
+  if (import.meta.prerender) {
+    console.log('⏭️  Skipping background services (prerender mode)')
+    return
+  }
+
+  // Only start services in production runtime, not during build
+  if (process.env.NITRO_PRESET === 'nitro-prerender') {
+    console.log('⏭️  Skipping background services (build mode)')
+    return
+  }
+
   console.log('🚀 Starting background services...')
 
   // Start the publishing worker
