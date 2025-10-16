@@ -77,7 +77,7 @@ jobs:
         uses: appleboy/telegram-action@master
         with:
           to: -1003046981339
-          token: 1798483416:AAEPm2r9l6rdhHyeeovRAiL2db5sKigLNKo
+          token: 8239071317:AAFblMdpW-rmKBcdShL73et2jbUoadOv5-s
           message: |
             [Produaction Environment]
             [${{ github.event.head_commit.committer.name }}](https://github.com/${{github.event.head_commit.committer.username}}) pushed new commit:
