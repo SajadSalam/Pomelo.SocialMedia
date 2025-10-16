@@ -16,6 +16,112 @@ interface WizardSession extends Scenes.SceneSession {
   publishMode?: 'now' | 'scheduled'
 }
 
+// Helper function to publish the post
+async function publishPost(ctx: any, session: WizardSession) {
+  await ctx.reply('⏳ Creating your post...')
+
+  try {
+    // Create post with optional scheduledAt
+    const post = await prisma.postRequest.create({
+      data: {
+        clientId: session.clientId!,
+        kind: session.postType!,
+        caption: session.caption!,
+        mediaIds: JSON.stringify(session.mediaIds || []),
+        status: 'DRAFT',
+        scheduledAt: session.scheduledAt || null,
+        createdVia: 'telegram',
+      },
+    })
+
+    // Get client with channels
+    const client = await prisma.client.findUnique({
+      where: { id: session.clientId! },
+      include: {
+        channels: {
+          where: { isEnabled: true },
+        },
+      },
+    })
+
+    if (!client || client.channels.length === 0) {
+      await ctx.reply('✅ Post created as draft. No enabled channels found.')
+      return
+    }
+
+    // Update post status to READY
+    await prisma.postRequest.update({
+      where: { id: post.id },
+      data: { status: 'READY' },
+    })
+
+    const channelNames = client.channels.map(ch =>
+      ch.type === 'FACEBOOK_PAGE' ? `📘 ${ch.name || 'Facebook'}` : `📸 ${ch.name || 'Instagram'}`,
+    ).join('\n  • ')
+
+    // Handle immediate vs scheduled publishing
+    if (session.publishMode === 'now') {
+      // Create publications and queue jobs immediately
+      const publications = await Promise.all(
+        client.channels.map(channel =>
+          prisma.publication.create({
+            data: {
+              postRequestId: post.id,
+              channelId: channel.id,
+              status: 'queued',
+            },
+          }),
+        ),
+      )
+
+      // Queue publishing jobs
+      try {
+        const { getPublishQueue } = await import('../../utils/queue')
+        const publishQueue = await getPublishQueue()
+
+        for (const publication of publications) {
+          await publishQueue.add('publish-post', {
+            publicationId: publication.id,
+          })
+        }
+      }
+      catch (error) {
+        console.error('Failed to queue publications:', error)
+      }
+
+      await ctx.reply(
+        `✅ *Post Published Successfully!*\n\n`
+        + `🚀 Your post is now being published to:\n\n`
+        + `  • ${channelNames}\n\n`
+        + `━━━━━━━━━━━━━━━━\n`
+        + `📊 View status in the dashboard\n`
+        + `📝 Post ID: \`${post.id}\`\n\n`
+        + `Type /new to create another post!`,
+        { parse_mode: 'Markdown' },
+      )
+    }
+    else {
+      // Scheduled post - don't create publications yet (scheduler will handle it)
+      await ctx.reply(
+        `✅ *Post Scheduled Successfully!*\n\n`
+        + `📅 *Scheduled for:* ${session.scheduledAt?.toLocaleString()}\n\n`
+        + `📢 *Will publish to:*\n  • ${channelNames}\n\n`
+        + `━━━━━━━━━━━━━━━━\n`
+        + `The post will be automatically published at the scheduled time.\n\n`
+        + `📊 View status in the dashboard\n`
+        + `📝 Post ID: \`${post.id}\`\n\n`
+        + `Type /new to create another post!`,
+        { parse_mode: 'Markdown' },
+      )
+    }
+  }
+  catch (error: any) {
+    await ctx.reply(`❌ *Failed to Create Post*\n\n${error.message}\n\nPlease try again with /new`, {
+      parse_mode: 'Markdown',
+    })
+  }
+}
+
 export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
   'post-wizard',
   // Step 1: Select client
@@ -350,7 +456,9 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     if (data === 'publish:now') {
       session.publishMode = 'now'
       await ctx.answerCbQuery()
-      return ctx.wizard.next()
+      // Publish immediately
+      await publishPost(ctx, session)
+      return ctx.scene.leave()
     }
 
     if (data === 'publish:schedule') {
@@ -373,11 +481,6 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
   async (ctx) => {
     const session = ctx.scene.session as WizardSession
 
-    // Skip this step if publishing now
-    if (session.publishMode === 'now') {
-      return ctx.wizard.next()
-    }
-
     if (!ctx.message || !('text' in ctx.message)) {
       await ctx.reply('Please enter a date and time in the format: YYYY-MM-DD HH:mm')
       return
@@ -389,7 +492,8 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     if (text === '/now') {
       session.publishMode = 'now'
       session.scheduledAt = undefined
-      return ctx.wizard.next()
+      await publishPost(ctx, session)
+      return ctx.scene.leave()
     }
 
     // Parse datetime in format: YYYY-MM-DD HH:mm
@@ -439,115 +543,8 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
       { parse_mode: 'Markdown' },
     )
 
-    return ctx.wizard.next()
-  },
-  // Step 8: Final publish step
-  async (ctx) => {
-    const session = ctx.scene.session as WizardSession
-
-    await ctx.reply('⏳ Creating your post...')
-
-    try {
-      // Create post with optional scheduledAt
-      const post = await prisma.postRequest.create({
-        data: {
-          clientId: session.clientId!,
-          kind: session.postType!,
-          caption: session.caption!,
-          mediaIds: JSON.stringify(session.mediaIds || []),
-          status: 'DRAFT',
-          scheduledAt: session.scheduledAt || null,
-          createdVia: 'telegram',
-        },
-      })
-
-      // Get client with channels
-      const client = await prisma.client.findUnique({
-        where: { id: session.clientId! },
-        include: {
-          channels: {
-            where: { isEnabled: true },
-          },
-        },
-      })
-
-      if (!client || client.channels.length === 0) {
-        await ctx.reply('✅ Post created as draft. No enabled channels found.')
-        return ctx.scene.leave()
-      }
-
-      // Update post status to READY
-      await prisma.postRequest.update({
-        where: { id: post.id },
-        data: { status: 'READY' },
-      })
-
-      const channelNames = client.channels.map(ch =>
-        ch.type === 'FACEBOOK_PAGE' ? `📘 ${ch.name || 'Facebook'}` : `📸 ${ch.name || 'Instagram'}`,
-      ).join('\n  • ')
-
-      // Handle immediate vs scheduled publishing
-      if (session.publishMode === 'now') {
-        // Create publications and queue jobs immediately
-        const publications = await Promise.all(
-          client.channels.map(channel =>
-            prisma.publication.create({
-              data: {
-                postRequestId: post.id,
-                channelId: channel.id,
-                status: 'queued',
-              },
-            }),
-          ),
-        )
-
-        // Queue publishing jobs
-        try {
-          const { getPublishQueue } = await import('../../utils/queue')
-          const publishQueue = await getPublishQueue()
-
-          for (const publication of publications) {
-            await publishQueue.add('publish-post', {
-              publicationId: publication.id,
-            })
-          }
-        }
-        catch (error) {
-          console.error('Failed to queue publications:', error)
-        }
-
-        await ctx.reply(
-          `✅ *Post Published Successfully!*\n\n`
-          + `🚀 Your post is now being published to:\n\n`
-          + `  • ${channelNames}\n\n`
-          + `━━━━━━━━━━━━━━━━\n`
-          + `📊 View status in the dashboard\n`
-          + `📝 Post ID: \`${post.id}\`\n\n`
-          + `Type /new to create another post!`,
-          { parse_mode: 'Markdown' },
-        )
-      }
-      else {
-        // Scheduled post - don't create publications yet (scheduler will handle it)
-        await ctx.reply(
-          `✅ *Post Scheduled Successfully!*\n\n`
-          + `📅 *Scheduled for:* ${session.scheduledAt?.toLocaleString()}\n\n`
-          + `📢 *Will publish to:*\n  • ${channelNames}\n\n`
-          + `━━━━━━━━━━━━━━━━\n`
-          + `The post will be automatically published at the scheduled time.\n\n`
-          + `📊 View status in the dashboard\n`
-          + `📝 Post ID: \`${post.id}\`\n\n`
-          + `Type /new to create another post!`,
-          { parse_mode: 'Markdown' },
-        )
-      }
-    }
-    catch (error: any) {
-      await ctx.reply(`❌ *Failed to Create Post*\n\n${error.message}\n\nPlease try again with /new`, {
-        parse_mode: 'Markdown',
-      })
-    }
-
+    // Publish the scheduled post
+    await publishPost(ctx, session)
     return ctx.scene.leave()
   },
 )
