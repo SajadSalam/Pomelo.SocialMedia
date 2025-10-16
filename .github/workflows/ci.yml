@@ -19,12 +19,12 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             echo "🚀 Starting deployment..."
-            if [ ! -d "/var/www/nuxt_social2" ]; then
-              echo "📁 Directory /var/www/nuxt_social2 not found, creating it..."
-              sudo mkdir -p /var/www/nuxt_social2
+            if [ ! -d "/var/www/nuxt_social" ]; then
+              echo "📁 Directory /var/www/nuxt_social not found, creating it..."
+              sudo mkdir -p /var/www/nuxt_social
             fi
 
-            cd /var/www/nuxt_social2 || exit 1
+            cd /var/www/nuxt_social || exit 1
 
             # Remove everything in the folder
             echo "🧹 Cleaning up old files..."
@@ -34,8 +34,8 @@ jobs:
             echo "📥 Cloning repository..."
             sudo git clone https://github.com/SajadSalam/Pomelo.SocialMedia.git
 
-            # mv Pomelo.SocialMedia to nuxt_social2
-            echo "🔍 Moving Pomelo.SocialMedia to nuxt_social2..."
+            # mv Pomelo.SocialMedia to nuxt_social
+            echo "🔍 Moving Pomelo.SocialMedia to nuxt_social..."
             sudo mv Pomelo.SocialMedia/* .
             sudo mv Pomelo.SocialMedia/.* .
             sudo rm -rf Pomelo.SocialMedia
@@ -70,6 +70,18 @@ jobs:
 
             # Restart the service
             echo "♻️  Restarting service..."
-            sudo systemctl restart Social.service
+            pm2 restart Social
 
             echo "✅ Deployment completed successfully!"
+      - name: send notification to telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: -1003046981339
+          token: 1798483416:AAEPm2r9l6rdhHyeeovRAiL2db5sKigLNKo
+          message: |
+            [Produaction Environment]
+            [${{ github.event.head_commit.committer.name }}](https://github.com/${{github.event.head_commit.committer.username}}) pushed new commit:
+            `[ ${{github.event.head_commit.message}} ]`
+            to [${{ github.event.repository.name }}](https://github.com/${{github.event.repository.html_url}})
+          format: markdown
+          disable_web_page_preview: true
