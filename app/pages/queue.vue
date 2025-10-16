@@ -6,8 +6,9 @@ definePageMeta({
 })
 
 const publications = ref<any[]>([])
+const scheduledPosts = ref<any[]>([])
 const loading = ref(true)
-const activeTab = ref('queued')
+const activeTab = ref('scheduled')
 const retryingPublications = ref<Set<string>>(new Set())
 
 async function loadPublications() {
@@ -16,7 +17,15 @@ async function loadPublications() {
     const posts = response.posts || []
     
     publications.value = []
+    scheduledPosts.value = []
+    
     posts.forEach((post: any) => {
+      // Add scheduled posts (posts with scheduledAt but no publications yet)
+      if (post.status === 'READY' && post.scheduledAt && (!post.publications || post.publications.length === 0)) {
+        scheduledPosts.value.push(post)
+      }
+      
+      // Add publications
       post.publications?.forEach((pub: any) => {
         publications.value.push({
           ...pub,
@@ -51,7 +60,6 @@ async function retryPublication(publicationId: string) {
   }
   catch (error: any) {
     console.error('Failed to retry publication:', error)
-    alert(error.message || 'Failed to retry publication')
   }
   finally {
     retryingPublications.value.delete(publicationId)
@@ -59,7 +67,17 @@ async function retryPublication(publicationId: string) {
 }
 
 const filteredPublications = computed(() => {
+  if (activeTab.value === 'scheduled') {
+    return []
+  }
   return publications.value.filter(pub => pub.status === activeTab.value)
+})
+
+const displayData = computed(() => {
+  if (activeTab.value === 'scheduled') {
+    return scheduledPosts.value
+  }
+  return filteredPublications.value
 })
 
 function getStatusColor(status: string) {
@@ -91,8 +109,19 @@ onMounted(() => {
     <div bg-white dark:bg-gray-800 rounded-xl shadow mb-6>
       <div flex border-b border-gray-200 dark:border-gray-700>
         <button
+          class="flex-1 px-6 py-4 text-sm font-medium transition"
           :class="[
-            'flex-1 px-6 py-4 text-sm font-medium transition',
+            activeTab === 'scheduled'
+              ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
+              : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+          ]"
+          @click="activeTab = 'scheduled'"
+        >
+          Scheduled ({{ scheduledPosts.length }})
+        </button>
+        <button
+          class="flex-1 px-6 py-4 text-sm font-medium transition"
+          :class="[
             activeTab === 'queued'
               ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -102,8 +131,8 @@ onMounted(() => {
           Queued ({{ publications.filter(p => p.status === 'queued').length }})
         </button>
         <button
+          class="flex-1 px-6 py-4 text-sm font-medium transition"
           :class="[
-            'flex-1 px-6 py-4 text-sm font-medium transition',
             activeTab === 'published'
               ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -113,8 +142,8 @@ onMounted(() => {
           Published ({{ publications.filter(p => p.status === 'published').length }})
         </button>
         <button
+          class="flex-1 px-6 py-4 text-sm font-medium transition"
           :class="[
-            'flex-1 px-6 py-4 text-sm font-medium transition',
             activeTab === 'failed'
               ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400'
               : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
@@ -134,14 +163,53 @@ onMounted(() => {
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="filteredPublications.length === 0" bg-white dark:bg-gray-800 rounded-xl shadow p-12 text-center>
+    <div v-else-if="displayData.length === 0" bg-white dark:bg-gray-800 rounded-xl shadow p-12 text-center>
       <span text-6xl mb-4 block>⏳</span>
       <h3 text-2xl font-bold text-gray-900 dark:text-white mb-2>
-        No {{ activeTab }} publications
+        No {{ activeTab }} {{ activeTab === 'scheduled' ? 'posts' : 'publications' }}
       </h3>
       <p text-gray-600 dark:text-gray-400>
-        Publications will appear here when posts are {{ activeTab }}
+        {{ activeTab === 'scheduled' ? 'Scheduled posts will appear here' : `Publications will appear here when posts are ${activeTab}` }}
       </p>
+    </div>
+
+    <!-- Scheduled Posts List -->
+    <div v-else-if="activeTab === 'scheduled'" bg-white dark:bg-gray-800 rounded-xl shadow divide-y divide-gray-200 dark:divide-gray-700>
+      <div
+        v-for="post in scheduledPosts"
+        :key="post.id"
+        px-6 py-4
+      >
+        <div flex items-start justify-between>
+          <div flex-1>
+            <div flex items-center gap-3 mb-2>
+              <span class="px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-800">
+                Scheduled
+              </span>
+              <span class="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                {{ post.kind }}
+              </span>
+            </div>
+            <p text-gray-900 dark:text-white font-medium mb-1>
+              📅 {{ new Date(post.scheduledAt).toLocaleString() }}
+            </p>
+            <p text-sm text-gray-600 dark:text-gray-400 truncate>
+              {{ post.caption }}
+            </p>
+            <p text-xs text-gray-500 dark:text-gray-400 mt-2>
+              Post will be automatically published at the scheduled time
+            </p>
+          </div>
+          <div flex items-center gap-3>
+            <NuxtLink
+              :to="`/posts/${post.id}`"
+              text-indigo-600 dark:text-indigo-400 hover:underline text-sm
+            >
+              View Post
+            </NuxtLink>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Publications List -->
@@ -154,14 +222,12 @@ onMounted(() => {
         <div flex items-start justify-between>
           <div flex-1>
             <div flex items-center gap-3 mb-2>
-              <span :class="['px-2 py-1 rounded text-xs font-medium', getStatusColor(pub.status)]">
+              <span class="px-2 py-1 rounded text-xs font-medium" :class="getStatusColor(pub.status)">
                 {{ pub.status }}
               </span>
               <span
-                :class="[
-                  'px-2 py-1 text-xs rounded',
-                  pub.channel.type === 'FACEBOOK_PAGE' ? 'bg-blue-100 text-blue-800' : 'bg-pink-100 text-pink-800'
-                ]"
+                class="px-2 py-1 text-xs rounded"
+                :class="pub.channel.type === 'FACEBOOK_PAGE' ? 'bg-blue-100 text-blue-800' : 'bg-pink-100 text-pink-800'"
               >
                 {{ pub.channel.type }}
               </span>
@@ -182,14 +248,14 @@ onMounted(() => {
           <div flex items-center gap-3>
             <button
               v-if="pub.status === 'failed'"
-              :disabled="retryingPublications.has(pub.id)"
-              @click="retryPublication(pub.id)"
-              :class="[
-                'px-3 py-1.5 rounded text-sm font-medium transition-colors',
+              class="px-3 py-1.5 rounded text-sm font-medium transition-colors"
+              :class="
                 retryingPublications.has(pub.id)
                   ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                   : 'bg-orange-600 text-white hover:bg-orange-700 dark:bg-orange-500 dark:hover:bg-orange-600'
-              ]"
+              "
+              :disabled="retryingPublications.has(pub.id)"
+              @click="retryPublication(pub.id)"
             >
               <span v-if="retryingPublications.has(pub.id)">...</span>
               <span v-else>🔄 Retry</span>
