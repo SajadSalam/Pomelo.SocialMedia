@@ -12,6 +12,8 @@ interface WizardSession extends Scenes.SceneSession {
   mediaUrls?: string[]
   mediaIds?: string[]
   caption?: string
+  scheduledAt?: Date
+  publishMode?: 'now' | 'scheduled'
 }
 
 export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
@@ -198,9 +200,11 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
           },
         })
 
-        if (!session.mediaUrls) session.mediaUrls = []
-        if (!session.mediaIds) session.mediaIds = []
-        
+        if (!session.mediaUrls)
+          session.mediaUrls = []
+        if (!session.mediaIds)
+          session.mediaIds = []
+
         session.mediaUrls.push(mediaAsset.url)
         session.mediaIds.push(mediaAsset.id)
 
@@ -210,12 +214,10 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
         }
         else if (session.postType === 'CAROUSEL') {
           await ctx.reply(`✅ Image ${session.mediaUrls.length} received. Send more images or type /done to continue.`)
-          return
         }
       }
       catch (error: any) {
         await ctx.reply(`Failed to process image: ${error.message}`)
-        return
       }
     }
     // Handle video
@@ -251,9 +253,11 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
           },
         })
 
-        if (!session.mediaUrls) session.mediaUrls = []
-        if (!session.mediaIds) session.mediaIds = []
-        
+        if (!session.mediaUrls)
+          session.mediaUrls = []
+        if (!session.mediaIds)
+          session.mediaIds = []
+
         session.mediaUrls.push(mediaAsset.url)
         session.mediaIds.push(mediaAsset.id)
 
@@ -264,7 +268,6 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
       }
       catch (error: any) {
         await ctx.reply(`Failed to process video: ${error.message}`)
-        return
       }
     }
     else {
@@ -295,9 +298,12 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
       .map(ch => `  • ${ch.type === 'FACEBOOK_PAGE' ? '📘 Facebook' : '📸 Instagram'}: ${ch.name || 'Unnamed'}`)
       .join('\n') || '  • No channels'
 
-    const postTypeDisplay = session.postType === 'SINGLE_IMAGE' ? '📷 Single Image'
-      : session.postType === 'CAROUSEL' ? '🎞️ Carousel'
-        : session.postType === 'VIDEO' ? '🎥 Video/Reel'
+    const postTypeDisplay = session.postType === 'SINGLE_IMAGE'
+      ? '📷 Single Image'
+      : session.postType === 'CAROUSEL'
+        ? '🎞️ Carousel'
+        : session.postType === 'VIDEO'
+          ? '🎥 Video/Reel'
           : '📱 Story'
 
     await ctx.reply(
@@ -316,13 +322,14 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [Markup.button.callback('✅ Publish Now', 'publish:now')],
+          [Markup.button.callback('📅 Schedule for Later', 'publish:schedule')],
           [Markup.button.callback('❌ Cancel', 'publish:cancel')],
         ]),
       },
     )
     return ctx.wizard.next()
   },
-  // Step 6: Handle publish confirmation
+  // Step 6: Handle publish mode selection
   async (ctx) => {
     if (!ctx.callbackQuery || !('data' in ctx.callbackQuery)) {
       await ctx.reply('Please select an option from the buttons above.')
@@ -330,6 +337,7 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     }
 
     const data = ctx.callbackQuery.data
+    const session = ctx.scene.session as WizardSession
 
     if (data === 'publish:cancel') {
       await ctx.answerCbQuery()
@@ -340,94 +348,206 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
     }
 
     if (data === 'publish:now') {
-      const session = ctx.scene.session as WizardSession
-      
+      session.publishMode = 'now'
       await ctx.answerCbQuery()
-      await ctx.reply('⏳ Publishing your post...')
+      return ctx.wizard.next()
+    }
 
-      try {
-        // Create post
-        const post = await prisma.postRequest.create({
-          data: {
-            clientId: session.clientId!,
-            kind: session.postType!,
-            caption: session.caption!,
-            mediaIds: JSON.stringify(session.mediaIds || []),
-            status: 'DRAFT',
-            createdVia: 'telegram',
-          },
-        })
-
-        // Publish post
-        const client = await prisma.client.findUnique({
-          where: { id: session.clientId! },
-          include: {
-            channels: {
-              where: { isEnabled: true },
-            },
-          },
-        })
-
-        if (client && client.channels.length > 0) {
-          await prisma.postRequest.update({
-            where: { id: post.id },
-            data: { status: 'READY' },
-          })
-
-          const publications = await Promise.all(
-            client.channels.map(channel =>
-              prisma.publication.create({
-                data: {
-                  postRequestId: post.id,
-                  channelId: channel.id,
-                  status: 'queued',
-                },
-              }),
-            ),
-          )
-
-          // Queue publishing jobs
-          try {
-            const { getPublishQueue } = await import('../../utils/queue')
-            const publishQueue = await getPublishQueue()
-            
-            for (const publication of publications) {
-              await publishQueue.add('publish-post', {
-                publicationId: publication.id,
-              })
-            }
-          }
-          catch (error) {
-            console.error('Failed to queue publications:', error)
-          }
-
-          const channelNames = client.channels.map(ch => 
-            ch.type === 'FACEBOOK_PAGE' ? `📘 ${ch.name || 'Facebook'}` : `📸 ${ch.name || 'Instagram'}`
-          ).join('\n  • ')
-
-          await ctx.reply(
-            `✅ *Post Published Successfully!*\n\n`
-            + `🚀 Your post is now being published to:\n\n`
-            + `  • ${channelNames}\n\n`
-            + `━━━━━━━━━━━━━━━━\n`
-            + `📊 View status in the dashboard\n`
-            + `📝 Post ID: \`${post.id}\`\n\n`
-            + `Type /new to create another post!`,
-            { parse_mode: 'Markdown' },
-          )
-        }
-        else {
-          await ctx.reply('✅ Post created as draft. No enabled channels found.')
-        }
-      }
-      catch (error: any) {
-        await ctx.reply(`❌ *Failed to Create Post*\n\n${error.message}\n\nPlease try again with /new`, {
-          parse_mode: 'Markdown',
-        })
-      }
-
-      return ctx.scene.leave()
+    if (data === 'publish:schedule') {
+      session.publishMode = 'scheduled'
+      await ctx.answerCbQuery()
+      await ctx.reply(
+        `📅 *Schedule Your Post*\n\n`
+        + `Please enter the date and time when you want to publish this post.\n\n`
+        + `*Format:* \`YYYY-MM-DD HH:mm\`\n\n`
+        + `*Examples:*\n`
+        + `• \`2025-10-17 14:30\`\n`
+        + `• \`2025-12-25 09:00\`\n\n`
+        + `Or type /now to publish immediately instead.`,
+        { parse_mode: 'Markdown' },
+      )
+      return ctx.wizard.next()
     }
   },
-)
+  // Step 7: Handle schedule datetime input
+  async (ctx) => {
+    const session = ctx.scene.session as WizardSession
 
+    // Skip this step if publishing now
+    if (session.publishMode === 'now') {
+      return ctx.wizard.next()
+    }
+
+    if (!ctx.message || !('text' in ctx.message)) {
+      await ctx.reply('Please enter a date and time in the format: YYYY-MM-DD HH:mm')
+      return
+    }
+
+    const text = ctx.message.text.trim()
+
+    // Allow /now to skip scheduling
+    if (text === '/now') {
+      session.publishMode = 'now'
+      session.scheduledAt = undefined
+      return ctx.wizard.next()
+    }
+
+    // Parse datetime in format: YYYY-MM-DD HH:mm
+    const datetimeRegex = /^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/
+    const match = text.match(datetimeRegex)
+
+    if (!match) {
+      await ctx.reply(
+        `❌ *Invalid Format*\n\n`
+        + `Please use the format: \`YYYY-MM-DD HH:mm\`\n\n`
+        + `Example: \`2025-10-17 14:30\``,
+        { parse_mode: 'Markdown' },
+      )
+      return
+    }
+
+    const [, year, month, day, hour, minute] = match
+    const scheduledDate = new Date(`${year}-${month}-${day}T${hour}:${minute}:00`)
+
+    // Validate date
+    if (Number.isNaN(scheduledDate.getTime())) {
+      await ctx.reply('❌ Invalid date. Please check your input and try again.')
+      return
+    }
+
+    // Check if date is in the future
+    const now = new Date()
+    if (scheduledDate <= now) {
+      await ctx.reply(
+        `❌ *Date Must Be In The Future*\n\n`
+        + `The scheduled time must be later than the current time.\n\n`
+        + `Current time: ${now.toLocaleString()}\n`
+        + `Your input: ${scheduledDate.toLocaleString()}`,
+        { parse_mode: 'Markdown' },
+      )
+      return
+    }
+
+    // Store the scheduled date
+    session.scheduledAt = scheduledDate
+
+    await ctx.reply(
+      `✅ *Schedule Set*\n\n`
+      + `Your post will be published on:\n`
+      + `📅 ${scheduledDate.toLocaleString()}\n\n`
+      + `Proceeding to publish...`,
+      { parse_mode: 'Markdown' },
+    )
+
+    return ctx.wizard.next()
+  },
+  // Step 8: Final publish step
+  async (ctx) => {
+    const session = ctx.scene.session as WizardSession
+
+    await ctx.reply('⏳ Creating your post...')
+
+    try {
+      // Create post with optional scheduledAt
+      const post = await prisma.postRequest.create({
+        data: {
+          clientId: session.clientId!,
+          kind: session.postType!,
+          caption: session.caption!,
+          mediaIds: JSON.stringify(session.mediaIds || []),
+          status: 'DRAFT',
+          scheduledAt: session.scheduledAt || null,
+          createdVia: 'telegram',
+        },
+      })
+
+      // Get client with channels
+      const client = await prisma.client.findUnique({
+        where: { id: session.clientId! },
+        include: {
+          channels: {
+            where: { isEnabled: true },
+          },
+        },
+      })
+
+      if (!client || client.channels.length === 0) {
+        await ctx.reply('✅ Post created as draft. No enabled channels found.')
+        return ctx.scene.leave()
+      }
+
+      // Update post status to READY
+      await prisma.postRequest.update({
+        where: { id: post.id },
+        data: { status: 'READY' },
+      })
+
+      const channelNames = client.channels.map(ch =>
+        ch.type === 'FACEBOOK_PAGE' ? `📘 ${ch.name || 'Facebook'}` : `📸 ${ch.name || 'Instagram'}`,
+      ).join('\n  • ')
+
+      // Handle immediate vs scheduled publishing
+      if (session.publishMode === 'now') {
+        // Create publications and queue jobs immediately
+        const publications = await Promise.all(
+          client.channels.map(channel =>
+            prisma.publication.create({
+              data: {
+                postRequestId: post.id,
+                channelId: channel.id,
+                status: 'queued',
+              },
+            }),
+          ),
+        )
+
+        // Queue publishing jobs
+        try {
+          const { getPublishQueue } = await import('../../utils/queue')
+          const publishQueue = await getPublishQueue()
+
+          for (const publication of publications) {
+            await publishQueue.add('publish-post', {
+              publicationId: publication.id,
+            })
+          }
+        }
+        catch (error) {
+          console.error('Failed to queue publications:', error)
+        }
+
+        await ctx.reply(
+          `✅ *Post Published Successfully!*\n\n`
+          + `🚀 Your post is now being published to:\n\n`
+          + `  • ${channelNames}\n\n`
+          + `━━━━━━━━━━━━━━━━\n`
+          + `📊 View status in the dashboard\n`
+          + `📝 Post ID: \`${post.id}\`\n\n`
+          + `Type /new to create another post!`,
+          { parse_mode: 'Markdown' },
+        )
+      }
+      else {
+        // Scheduled post - don't create publications yet (scheduler will handle it)
+        await ctx.reply(
+          `✅ *Post Scheduled Successfully!*\n\n`
+          + `📅 *Scheduled for:* ${session.scheduledAt?.toLocaleString()}\n\n`
+          + `📢 *Will publish to:*\n  • ${channelNames}\n\n`
+          + `━━━━━━━━━━━━━━━━\n`
+          + `The post will be automatically published at the scheduled time.\n\n`
+          + `📊 View status in the dashboard\n`
+          + `📝 Post ID: \`${post.id}\`\n\n`
+          + `Type /new to create another post!`,
+          { parse_mode: 'Markdown' },
+        )
+      }
+    }
+    catch (error: any) {
+      await ctx.reply(`❌ *Failed to Create Post*\n\n${error.message}\n\nPlease try again with /new`, {
+        parse_mode: 'Markdown',
+      })
+    }
+
+    return ctx.scene.leave()
+  },
+)
