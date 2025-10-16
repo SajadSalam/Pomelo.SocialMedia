@@ -194,6 +194,9 @@ onMounted(() => {
             <option value="VIDEO">
               Video
             </option>
+            <option value="STORY">
+              Story (Instagram Only)
+            </option>
           </select>
         </div>
 
@@ -205,7 +208,7 @@ onMounted(() => {
           <input
             type="file"
             :multiple="form.kind === 'CAROUSEL'"
-            :accept="form.kind === 'VIDEO' ? 'video/*' : 'image/*'"
+            :accept="form.kind === 'VIDEO' ? 'video/*' : form.kind === 'STORY' ? 'image/*,video/*' : 'image/*'"
 
             text-gray-900 px-4 py-2 border border-gray-300 rounded-lg bg-white w-full dark:text-white dark:border-gray-600 dark:bg-gray-700
             @change="handleFileUpload"
@@ -215,6 +218,9 @@ onMounted(() => {
           </p>
           <p v-else-if="form.mediaIds.length > 0" text-sm text-green-600 mt-2 dark:text-green-400>
             ✓ {{ form.mediaIds.length }} file(s) uploaded
+          </p>
+          <p v-if="form.kind === 'STORY'" text-xs text-gray-500 mt-1 dark:text-gray-400>
+            <strong class="text-blue-600 dark:text-blue-400">Instagram Stories:</strong> Support both images and videos (max 15 seconds for videos). Recommended: 9:16 aspect ratio (1080x1920).
           </p>
         </div>
 

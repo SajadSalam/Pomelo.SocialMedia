@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // Validate kind
-    const validKinds = ['SINGLE_IMAGE', 'CAROUSEL', 'VIDEO']
+    const validKinds = ['SINGLE_IMAGE', 'CAROUSEL', 'VIDEO', 'STORY']
     if (!validKinds.includes(kind)) {
       throw createError({
         statusCode: 400,
@@ -34,6 +34,14 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 400,
         statusMessage: 'Carousel must have 2-10 images',
+      })
+    }
+
+    // Validate story has exactly 1 media file
+    if (kind === 'STORY' && mediaIds.length !== 1) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'Story must have exactly 1 media file',
       })
     }
 

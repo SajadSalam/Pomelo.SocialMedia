@@ -41,10 +41,15 @@ if (bot) {
       + '• /cancel \\- Cancel current operation\n\n'
       + '*How it works:*\n'
       + '1️⃣ Select your client\n'
-      + '2️⃣ Choose post type \\(image/carousel/video\\)\n'
+      + '2️⃣ Choose post type \\(image/carousel/video/story\\)\n'
       + '3️⃣ Send your media files\n'
       + '4️⃣ Add a caption\n'
       + '5️⃣ Publish to all configured channels\\!\n\n'
+      + '*Post Types:*\n'
+      + '• 📷 Single Image \\- One image post\n'
+      + '• 🎞️ Carousel \\- 2\\-10 images\n'
+      + '• 🎥 Video/Reel \\- Video content\n'
+      + '• 📱 Story \\- Instagram Stories only\n\n'
       + '✨ The bot automatically publishes to all enabled Facebook and Instagram channels for your selected client\\.',
       { parse_mode: 'MarkdownV2' },
     )

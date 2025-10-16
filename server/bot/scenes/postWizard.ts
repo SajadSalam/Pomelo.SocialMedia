@@ -85,6 +85,7 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
           [Markup.button.callback('📷 Single Image', 'type:SINGLE_IMAGE')],
           [Markup.button.callback('🎞️ Carousel (2-10 images)', 'type:CAROUSEL')],
           [Markup.button.callback('🎥 Video/Reel', 'type:VIDEO')],
+          [Markup.button.callback('📱 Story (Instagram)', 'type:STORY')],
         ]),
       },
     )
@@ -131,6 +132,14 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
         + '📤 Please send *1 video* file.\n\n'
         + '• Max duration: 60 seconds (recommended)\n'
         + '• Recommended: 1080x1920px (9:16 for Reels)'
+    }
+    else if (postType === 'STORY') {
+      emoji = '📱'
+      message = `${emoji} *Instagram Story*\n\n`
+        + '📤 Please send *1 image or video* file.\n\n'
+        + '• Images: JPG/PNG format\n'
+        + '• Videos: Max 15 seconds\n'
+        + '• Recommended: 1080x1920px (9:16 aspect ratio)'
     }
 
     await ctx.editMessageText(
@@ -195,7 +204,7 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
         session.mediaUrls.push(mediaAsset.url)
         session.mediaIds.push(mediaAsset.id)
 
-        if (session.postType === 'SINGLE_IMAGE') {
+        if (session.postType === 'SINGLE_IMAGE' || session.postType === 'STORY') {
           await ctx.reply('✅ Image received! Now please enter the caption for your post:')
           return ctx.wizard.next()
         }
@@ -248,8 +257,10 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
         session.mediaUrls.push(mediaAsset.url)
         session.mediaIds.push(mediaAsset.id)
 
-        await ctx.reply('✅ Video received! Now please enter the caption for your post:')
-        return ctx.wizard.next()
+        if (session.postType === 'VIDEO' || session.postType === 'STORY') {
+          await ctx.reply('✅ Video received! Now please enter the caption for your post:')
+          return ctx.wizard.next()
+        }
       }
       catch (error: any) {
         await ctx.reply(`Failed to process video: ${error.message}`)
@@ -286,7 +297,8 @@ export const postWizard = new Scenes.WizardScene<Scenes.WizardContext>(
 
     const postTypeDisplay = session.postType === 'SINGLE_IMAGE' ? '📷 Single Image'
       : session.postType === 'CAROUSEL' ? '🎞️ Carousel'
-        : '🎥 Video/Reel'
+        : session.postType === 'VIDEO' ? '🎥 Video/Reel'
+          : '📱 Story'
 
     await ctx.reply(
       `━━━━━━━━━━━━━━━━\n`

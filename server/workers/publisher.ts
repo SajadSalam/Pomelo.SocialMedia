@@ -5,6 +5,7 @@ import {
     createFacebookPost,
     createInstagramCarousel,
     createInstagramPost,
+    createInstagramStory,
     uploadPhoto,
     uploadVideo,
 } from '../utils/facebook'
@@ -181,6 +182,22 @@ async function initializeWorker() {
           console.log('✅ [Facebook] Video uploaded:', result.id)
           platformPostId = result.id
         }
+        else if (postRequest.kind === 'STORY') {
+          // Stories are only supported for Instagram - skip Facebook Pages silently
+          console.log('⏭️  [Facebook] Skipping story for Facebook Page (Stories are Instagram-only)')
+          
+          // Mark as completed for this channel
+          await prisma.publication.update({
+            where: { id: publicationId },
+            data: {
+              status: 'published',
+              platformPostId: null,
+              error: null,
+            },
+          })
+
+          return { success: true, skipped: true, reason: 'Stories only supported on Instagram' }
+        }
         else {
           throw new Error(`Unsupported post kind: ${postRequest.kind}`)
         }
@@ -231,6 +248,22 @@ async function initializeWorker() {
             channel.accessToken,
           )
           console.log('✅ [Instagram] Video post created:', result.id)
+          platformPostId = result.id
+        }
+        else if (postRequest.kind === 'STORY') {
+          // Story post - determine if image or video based on media type
+          console.log('📱 [Instagram] Creating story...')
+          const mediaAsset = mediaAssets[0]
+          const isVideo = mediaAsset.mimeType.startsWith('video/')
+          const mediaType = isVideo ? 'video' : 'image'
+          
+          const result = await createInstagramStory(
+            channel.externalId,
+            mediaUrls[0],
+            mediaType,
+            channel.accessToken,
+          )
+          console.log('✅ [Instagram] Story created:', result.id)
           platformPostId = result.id
         }
         else {

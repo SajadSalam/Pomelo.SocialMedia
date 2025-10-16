@@ -432,3 +432,61 @@ export async function fetchInstagramInsights(
     throw new Error(fbError?.error?.message || 'Failed to fetch Instagram insights')
   }
 }
+
+/**
+ * Create an Instagram Story (image or video)
+ */
+export async function createInstagramStory(
+  instagramAccountId: string,
+  mediaUrl: string,
+  mediaType: 'image' | 'video',
+  accessToken: string,
+): Promise<{ id: string }> {
+  try {
+    console.log(`📤 [Instagram API] Creating ${mediaType} story...`)
+    console.log('   - Instagram Account ID:', instagramAccountId)
+    console.log('   - Media URL:', mediaUrl)
+
+    // Step 1: Create story container
+    const containerParams: any = {
+      media_type: 'STORIES',
+      access_token: accessToken,
+    }
+
+    if (mediaType === 'image') {
+      containerParams.image_url = mediaUrl
+    }
+    else {
+      containerParams.video_url = mediaUrl
+    }
+
+    const containerResponse = await axios.post(
+      `${GRAPH_API_BASE}/${instagramAccountId}/media`,
+      containerParams,
+    )
+
+    const containerId = containerResponse.data.id
+    console.log('✅ [Instagram API] Story container created:', containerId)
+
+    // Step 2: Wait for container to be ready
+    await pollContainerStatus(containerId, accessToken)
+
+    // Step 3: Publish the story
+    console.log('📤 [Instagram API] Publishing story...')
+    const publishResponse = await axios.post(
+      `${GRAPH_API_BASE}/${instagramAccountId}/media_publish`,
+      {
+        creation_id: containerId,
+        access_token: accessToken,
+      },
+    )
+
+    console.log('✅ [Instagram API] Story published:', publishResponse.data.id)
+    return publishResponse.data
+  }
+  catch (error: any) {
+    console.error(`❌ [Instagram API] Failed to create ${mediaType} story:`, error.response?.data || error.message)
+    const fbError = error.response?.data as FacebookError
+    throw new Error(fbError?.error?.message || `Failed to create Instagram ${mediaType} story`)
+  }
+}
