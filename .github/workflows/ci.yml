@@ -25,10 +25,11 @@ jobs:
             fi
 
             cd /var/www/nuxt_social || exit 1
+            pm2 stop Social
 
             # Remove everything in the folder
             echo "🧹 Cleaning up old files..."
-            sudo rm -rf ./*
+            sudo rm -rf *
 
             # Clone the repo
             echo "📥 Cloning repository..."
